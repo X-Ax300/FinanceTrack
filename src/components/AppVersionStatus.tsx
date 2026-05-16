@@ -1,0 +1,160 @@
+import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
+import { Bell, CheckCircle, CreditCard, DollarSign, Sparkles, Users, X } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useNotifications } from '../hooks/useNotifications';
+import { APP_VERSION, getUserScopedKey } from '../lib/version';
+import Modal from './ui/Modal';
+import Button from './ui/Button';
+
+const LAST_SEEN_VERSION_KEY = 'ft-last-seen-version';
+const ONBOARDING_KEY = 'ft-onboarding-seen';
+
+export default function AppVersionStatus() {
+  const { currentUser } = useAuth();
+  const { theme } = useTheme();
+  const { isGranted, notifyInfo } = useNotifications();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showUpdateNotice, setShowUpdateNotice] = useState(false);
+  const [previousVersion, setPreviousVersion] = useState<string | null>(null);
+
+  const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
+  const userId = currentUser?.uid || null;
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const onboardingKey = getUserScopedKey(ONBOARDING_KEY, userId);
+    const versionKey = getUserScopedKey(LAST_SEEN_VERSION_KEY, userId);
+    const hasSeenOnboarding = localStorage.getItem(onboardingKey) === 'true';
+    const storedVersion = localStorage.getItem(versionKey);
+
+    if (!hasSeenOnboarding) {
+      setShowOnboarding(true);
+    }
+
+    if (storedVersion && storedVersion !== APP_VERSION) {
+      setPreviousVersion(storedVersion);
+      setShowUpdateNotice(true);
+
+      if (isGranted) {
+        notifyInfo('FinanceTrack actualizado', `Nueva versión disponible: v${APP_VERSION}`);
+      }
+    }
+
+    if (!storedVersion) {
+      localStorage.setItem(versionKey, APP_VERSION);
+    }
+  }, [isGranted, notifyInfo, userId]);
+
+  function closeOnboarding() {
+    if (userId) {
+      localStorage.setItem(getUserScopedKey(ONBOARDING_KEY, userId), 'true');
+      localStorage.setItem(getUserScopedKey(LAST_SEEN_VERSION_KEY, userId), APP_VERSION);
+    }
+    setShowOnboarding(false);
+  }
+
+  function closeUpdateNotice() {
+    if (userId) {
+      localStorage.setItem(getUserScopedKey(LAST_SEEN_VERSION_KEY, userId), APP_VERSION);
+    }
+    setShowUpdateNotice(false);
+  }
+
+  return (
+    <>
+      <div
+        className={`fixed bottom-3 right-3 z-40 rounded-lg border px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur
+          ${theme === 'dark'
+            ? 'border-gray-800 bg-gray-950/80 text-gray-400'
+            : 'border-gray-200 bg-white/85 text-gray-500'}`}
+        title={`FinanceTrack v${APP_VERSION}`}
+      >
+        v{APP_VERSION}
+      </div>
+
+      {showUpdateNotice && (
+        <div className="fixed bottom-12 right-3 z-40 w-[calc(100vw-1.5rem)] max-w-sm">
+          <div
+            className={`rounded-xl border p-4 shadow-xl backdrop-blur
+              ${theme === 'dark'
+                ? 'border-cyan-500/20 bg-gray-900/95 text-white'
+                : 'border-cyan-100 bg-white/95 text-gray-900'}`}
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-lg bg-cyan-500/15 p-2">
+                <Bell className="h-4 w-4 text-cyan-400" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Nueva versión instalada</p>
+                <p className={`mt-1 text-xs ${textSecondary}`}>
+                  Pasaste de v{previousVersion} a v{APP_VERSION}. Ya tienes las mejoras más recientes.
+                </p>
+              </div>
+              <button
+                onClick={closeUpdateNotice}
+                className={`rounded-lg p-1 transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-gray-800 hover:text-white' : 'text-gray-500 hover:bg-gray-100'}`}
+                aria-label="Cerrar aviso de actualización"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Modal open={showOnboarding} onClose={closeOnboarding} title="Bienvenido a FinanceTrack" maxWidth="max-w-xl">
+        <div className="space-y-5">
+          <p className={`text-sm ${textSecondary}`}>
+            Organiza tus finanzas desde un solo lugar. Este mini recorrido te muestra lo esencial para empezar.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <IntroItem icon={DollarSign} title="Ingresos y gastos" text="Registra entradas, salidas y métodos de pago para ver tu balance real." />
+            <IntroItem icon={CreditCard} title="Tarjetas" text="Controla límites, cargos y pagos de tus tarjetas de crédito." />
+            <IntroItem icon={CheckCircle} title="Metas" text="Crea objetivos de ahorro y revisa tu avance con claridad." />
+            <IntroItem icon={Users} title="Amigos" text="Invita personas de confianza para compartir una vista solo lectura." />
+          </div>
+
+          <div className={`rounded-xl border p-4 ${theme === 'dark' ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-cyan-100 bg-cyan-50'}`}>
+            <div className="flex items-start gap-3">
+              <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-cyan-400" />
+              <p className={`text-sm ${textPrimary}`}>
+                Activa las notificaciones web para enterarte cuando haya cambios importantes o cuando publiques una nueva versión.
+              </p>
+            </div>
+          </div>
+
+          <Button className="w-full" onClick={closeOnboarding}>
+            Empezar
+          </Button>
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+function IntroItem({
+  icon: Icon,
+  title,
+  text,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  text: string;
+}) {
+  const { theme } = useTheme();
+  const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
+  const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
+
+  return (
+    <div className={`rounded-xl border p-4 ${theme === 'dark' ? 'border-gray-800 bg-gray-800/50' : 'border-gray-100 bg-gray-50'}`}>
+      <Icon className="mb-3 h-5 w-5 text-cyan-400" />
+      <p className={`text-sm font-semibold ${textPrimary}`}>{title}</p>
+      <p className={`mt-1 text-xs leading-5 ${textSecondary}`}>{text}</p>
+    </div>
+  );
+}

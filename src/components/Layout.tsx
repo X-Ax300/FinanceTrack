@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../hooks/useNotifications';
+import AppVersionStatus from './AppVersionStatus';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -57,6 +58,8 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className={`min-h-screen flex ${theme === 'dark' ? 'bg-gray-950 text-white' : 'bg-gray-50 text-gray-900'}`}>
+      <AppVersionStatus />
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
