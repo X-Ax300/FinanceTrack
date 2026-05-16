@@ -67,9 +67,12 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       
       if (user) {
         unsubscribeSyncRef.current = setupSyncListener(user.uid);
+        
+        // Non-blocking prefetch in background
         if (navigator.onLine) {
-          processSyncQueue(user.uid).catch((error) => console.error('Initial sync failed:', error));
+          // Don't wait for this - let UI load first
           prefetchUserData(user.uid).catch((error) => console.error('Prefetch failed:', error));
+          processSyncQueue(user.uid).catch((error) => console.error('Initial sync failed:', error));
         }
       }
       

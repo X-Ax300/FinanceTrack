@@ -496,13 +496,20 @@ export async function getGoals(userId: string, options?: GetOptions): Promise<Sa
 export function prefetchUserData(userId: string): Promise<unknown[]> {
   if (!navigator.onLine) return Promise.resolve([]);
 
+  // Load only critical data first
   return Promise.allSettled([
     getExpenses(userId, { forceRefresh: true }),
     getSalaries(userId, { forceRefresh: true }),
-    getCreditCards(userId, { forceRefresh: true }),
-    getCardPayments(userId, { forceRefresh: true }),
-    getCardCharges(userId, { forceRefresh: true }),
-    getSavingGoals(userId, { forceRefresh: true }),
-    getFriends(userId, { forceRefresh: true }),
-  ]);
+  ]).then(results => {
+    // Load additional data in background (non-blocking)
+    Promise.allSettled([
+      getCreditCards(userId, { forceRefresh: true }),
+      getCardPayments(userId, { forceRefresh: true }),
+      getCardCharges(userId, { forceRefresh: true }),
+      getSavingGoals(userId, { forceRefresh: true }),
+      getFriends(userId, { forceRefresh: true }),
+    ]).catch(error => console.error('Background prefetch failed:', error));
+    
+    return results;
+  });
 }
