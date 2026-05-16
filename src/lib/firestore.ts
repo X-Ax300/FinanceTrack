@@ -4,18 +4,25 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   where,
   orderBy,
+  setDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { getCache, removeCachedItem, setCache, updateCachedItem } from './cache';
+import { getCache, removeCachedItem, setCache } from './cache';
 import type { Expense, Salary, CreditCard, CardPayment, CardCharge, SavingGoal, Friend } from '../types';
 
 const now = () => new Date().toISOString();
 
+// ============================================================================
+// COLLECTION NAMES
+// ============================================================================
+
 const COLLECTIONS = {
+  users: 'users',
   expenses: 'expenses',
   salaries: 'salaries',
   cards: 'credit_cards',
@@ -32,6 +39,10 @@ const LEGACY_COLLECTIONS = {
   goals: 'goals',
 } as const;
 
+// ============================================================================
+// HELPERS
+// ============================================================================
+
 interface GetOptions {
   forceRefresh?: boolean;
 }
@@ -39,8 +50,20 @@ interface GetOptions {
 const inFlightReads = new Map<string, Promise<unknown>>();
 const writeVersions = new Map<string, number>();
 
+/**
+ * Obtiene la ruta de colección para un usuario específico
+ * Ejemplo: users/user123/expenses
+ */
+function getUserCollectionPath(userId: string, collectionName: string): string {
+  return `users/${userId}/${collectionName}`;
+}
+
 function readKey(collectionName: string, userId: string): string {
   return `${collectionName}_${userId}`;
+}
+
+function normalizeEmail(email: string | null | undefined): string {
+  return (email || '').trim().toLowerCase();
 }
 
 function markCollectionChanged(collectionName: string, userId?: string) {
@@ -86,94 +109,78 @@ async function getCachedCollection<T>(
 }
 
 async function updateDocWithLegacyFallback(
-  collectionName: string,
-  legacyCollectionName: string | undefined,
+  collectionPath: string,
+  legacyCollectionPath: string | undefined,
   id: string,
-  data: Record<string, unknown>
+  data: Record<string, any>
 ) {
   try {
-    await updateDoc(doc(db, collectionName, id), data);
+    await updateDoc(doc(db, collectionPath, id), data);
   } catch (error) {
-    if (!legacyCollectionName) throw error;
-    await updateDoc(doc(db, legacyCollectionName, id), data);
+    if (!legacyCollectionPath) throw error;
+    await updateDoc(doc(db, legacyCollectionPath, id), data);
   }
 }
 
-async function deleteDocFromCollections(id: string, collectionNames: string[]) {
-  const results = await Promise.allSettled(
-    collectionNames.map((collectionName) => deleteDoc(doc(db, collectionName, id)))
-  );
-  const fulfilled = results.some((result) => result.status === 'fulfilled');
-
-  if (!fulfilled) {
-    const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (rejected) throw rejected.reason;
-  }
+async function deleteCardPaymentsForCard(cardId: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.cardPayments);
+  const q = query(collection(db, userPath), where('cardId', '==', cardId));
+  const snap = await getDocs(q);
+  await Promise.allSettled(snap.docs.map((d) => deleteDoc(doc(db, userPath, d.id))));
 }
 
-async function getDocsFromUserCollections<T>(
-  userId: string,
-  collectionNames: string[],
-  sortFn?: (a: T, b: T) => number
-): Promise<T[]> {
-  const results = await Promise.allSettled(
-    collectionNames.map((collectionName) =>
-      getDocs(query(collection(db, collectionName), where('userId', '==', userId)))
-    )
-  );
-  const [primaryResult] = results;
-
-  if (primaryResult?.status === 'rejected') {
-    throw primaryResult.reason;
-  }
-
-  const byId = new Map<string, T>();
-  results.forEach((result) => {
-    if (result.status === 'rejected') return;
-    const snap = result.value;
-    snap.docs.forEach((d) => {
-      byId.set(d.id, { id: d.id, ...d.data() } as T);
-    });
-  });
-
-  const items = Array.from(byId.values());
-  return sortFn ? items.sort(sortFn) : items;
+async function deleteCardChargesForCard(cardId: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.cardCharges);
+  const q = query(collection(db, userPath), where('cardId', '==', cardId));
+  const snap = await getDocs(q);
+  await Promise.allSettled(snap.docs.map((d) => deleteDoc(doc(db, userPath, d.id))));
 }
 
-async function deleteCardPaymentsForCard(cardId: string) {
-  const results = await Promise.allSettled(
-    [COLLECTIONS.cardPayments, LEGACY_COLLECTIONS.cardPayments].map((collectionName) =>
-      getDocs(query(collection(db, collectionName), where('cardId', '==', cardId)))
-    )
-  );
-  const snapshots = results.flatMap((result, index) =>
-    result.status === 'fulfilled' ? [{ snap: result.value, index }] : []
-  );
+// ============================================================================
+// USER PROFILES
+// ============================================================================
 
-  await Promise.allSettled(
-    snapshots.flatMap(({ snap, index }) => {
-      const collectionName = index === 0 ? COLLECTIONS.cardPayments : LEGACY_COLLECTIONS.cardPayments;
-      return snap.docs.map((paymentDoc) => deleteDoc(doc(db, collectionName, paymentDoc.id)));
-    })
+interface UserProfile {
+  uid: string;
+  email: string | null;
+  emailLower: string;
+  displayName: string | null;
+  photoURL?: string | null;
+  createdAt?: string;
+  updatedAt: string;
+}
+
+export async function upsertUserProfile(profile: {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+}) {
+  const userRef = doc(db, COLLECTIONS.users, profile.uid);
+  const existing = await getDoc(userRef);
+  await setDoc(
+    userRef,
+    {
+      uid: profile.uid,
+      email: profile.email,
+      emailLower: normalizeEmail(profile.email),
+      displayName: profile.displayName,
+      photoURL: profile.photoURL || null,
+      createdAt: existing.exists() ? existing.data().createdAt || now() : now(),
+      updatedAt: now(),
+    } satisfies UserProfile,
+    { merge: true }
   );
 }
 
-async function deleteCardChargesForCard(cardId: string) {
-  const results = await Promise.allSettled(
-    [COLLECTIONS.cardCharges, LEGACY_COLLECTIONS.cardCharges].map((collectionName) =>
-      getDocs(query(collection(db, collectionName), where('cardId', '==', cardId)))
-    )
-  );
-  const snapshots = results.flatMap((result, index) =>
-    result.status === 'fulfilled' ? [{ snap: result.value, index }] : []
-  );
+async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
+  const emailLower = normalizeEmail(email);
+  if (!emailLower) return null;
 
-  await Promise.allSettled(
-    snapshots.flatMap(({ snap, index }) => {
-      const collectionName = index === 0 ? COLLECTIONS.cardCharges : LEGACY_COLLECTIONS.cardCharges;
-      return snap.docs.map((chargeDoc) => deleteDoc(doc(db, collectionName, chargeDoc.id)));
-    })
-  );
+  const q = query(collection(db, COLLECTIONS.users), where('emailLower', '==', emailLower));
+  const snap = await getDocs(q);
+  const first = snap.docs[0];
+  return first ? ({ uid: first.id, ...first.data() } as UserProfile) : null;
 }
 
 // ============================================================================
@@ -181,41 +188,40 @@ async function deleteCardChargesForCard(cardId: string) {
 // ============================================================================
 
 export async function addExpense(data: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) {
-  const doc = await addDoc(collection(db, COLLECTIONS.expenses), { ...data, createdAt: now(), updatedAt: now() });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.expenses);
+  const expenseDoc = await addDoc(collection(db, userPath), { ...data, createdAt: now(), updatedAt: now() });
   markCollectionChanged('expenses', data.userId);
   
-  // Update cache
   const expenses = getCache<Expense[]>('expenses', data.userId) || [];
-  const newExpense: Expense = { id: doc.id, ...data, createdAt: now(), updatedAt: now() };
+  const newExpense: Expense = { id: expenseDoc.id, ...data, createdAt: now(), updatedAt: now() };
   setCache('expenses', [newExpense, ...expenses], data.userId);
   
-  return doc;
+  return expenseDoc;
 }
 
 export async function updateExpense(id: string, data: Partial<Expense>) {
+  if (!data.userId) throw new Error('userId is required');
   const updatedAt = now();
-  await updateDoc(doc(db, COLLECTIONS.expenses, id), { ...data, updatedAt });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.expenses);
+  await updateDoc(doc(db, userPath, id), { ...data, updatedAt });
   markCollectionChanged('expenses', data.userId);
   
-  // Update cache
-  if (data.userId) {
-    const expenses = getCache<Expense[]>('expenses', data.userId) || [];
-    const updated = expenses.map((e) => (e.id === id ? { ...e, ...data, updatedAt } : e));
-    setCache('expenses', updated, data.userId);
-  } else {
-    updateCachedItem<Expense>('expenses', id, { ...data, updatedAt } as Partial<Expense>);
-  }
+  const expenses = getCache<Expense[]>('expenses', data.userId) || [];
+  const updated = expenses.map((e) => (e.id === id ? { ...e, ...data, updatedAt } : e));
+  setCache('expenses', updated, data.userId);
 }
 
-export async function deleteExpense(id: string) {
-  await deleteDoc(doc(db, COLLECTIONS.expenses, id));
-  markCollectionChanged('expenses');
+export async function deleteExpense(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.expenses);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('expenses', userId);
   removeCachedItem('expenses', id);
 }
 
 export async function getExpenses(userId: string, options?: GetOptions): Promise<Expense[]> {
   return getCachedCollection('expenses', userId, async () => {
-    const q = query(collection(db, COLLECTIONS.expenses), where('userId', '==', userId), orderBy('date', 'desc'));
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.expenses);
+    const q = query(collection(db, userPath), orderBy('date', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense));
   }, options);
@@ -226,10 +232,10 @@ export async function getExpenses(userId: string, options?: GetOptions): Promise
 // ============================================================================
 
 export async function addSalary(data: Omit<Salary, 'id' | 'createdAt' | 'updatedAt'>) {
-  const salaryDoc = await addDoc(collection(db, COLLECTIONS.salaries), { ...data, createdAt: now(), updatedAt: now() });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.salaries);
+  const salaryDoc = await addDoc(collection(db, userPath), { ...data, createdAt: now(), updatedAt: now() });
   markCollectionChanged('salaries', data.userId);
   
-  // Update cache
   const salaries = getCache<Salary[]>('salaries', data.userId) || [];
   const newSalary: Salary = { id: salaryDoc.id, ...data, createdAt: now(), updatedAt: now() };
   setCache('salaries', [newSalary, ...salaries], data.userId);
@@ -238,29 +244,28 @@ export async function addSalary(data: Omit<Salary, 'id' | 'createdAt' | 'updated
 }
 
 export async function updateSalary(id: string, data: Partial<Salary>) {
+  if (!data.userId) throw new Error('userId is required');
   const updatedAt = now();
-  await updateDoc(doc(db, COLLECTIONS.salaries, id), { ...data, updatedAt });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.salaries);
+  await updateDoc(doc(db, userPath, id), { ...data, updatedAt });
   markCollectionChanged('salaries', data.userId);
   
-  // Update cache
-  if (data.userId) {
-    const salaries = getCache<Salary[]>('salaries', data.userId) || [];
-    const updated = salaries.map((s) => (s.id === id ? { ...s, ...data, updatedAt } : s));
-    setCache('salaries', updated, data.userId);
-  } else {
-    updateCachedItem<Salary>('salaries', id, { ...data, updatedAt } as Partial<Salary>);
-  }
+  const salaries = getCache<Salary[]>('salaries', data.userId) || [];
+  const updated = salaries.map((s) => (s.id === id ? { ...s, ...data, updatedAt } : s));
+  setCache('salaries', updated, data.userId);
 }
 
-export async function deleteSalary(id: string) {
-  await deleteDoc(doc(db, COLLECTIONS.salaries, id));
-  markCollectionChanged('salaries');
+export async function deleteSalary(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.salaries);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('salaries', userId);
   removeCachedItem('salaries', id);
 }
 
 export async function getSalaries(userId: string, options?: GetOptions): Promise<Salary[]> {
   return getCachedCollection('salaries', userId, async () => {
-    const q = query(collection(db, COLLECTIONS.salaries), where('userId', '==', userId), orderBy('date', 'desc'));
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.salaries);
+    const q = query(collection(db, userPath), orderBy('date', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Salary));
   }, options);
@@ -271,10 +276,10 @@ export async function getSalaries(userId: string, options?: GetOptions): Promise
 // ============================================================================
 
 export async function addCreditCard(data: Omit<CreditCard, 'id' | 'createdAt' | 'updatedAt'>) {
-  const cardDoc = await addDoc(collection(db, COLLECTIONS.cards), { ...data, createdAt: now(), updatedAt: now() });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.cards);
+  const cardDoc = await addDoc(collection(db, userPath), { ...data, createdAt: now(), updatedAt: now() });
   markCollectionChanged('cards', data.userId);
   
-  // Update cache
   const cards = getCache<CreditCard[]>('cards', data.userId) || [];
   const newCard: CreditCard = { id: cardDoc.id, ...data, createdAt: now(), updatedAt: now() };
   setCache('cards', [newCard, ...cards], data.userId);
@@ -283,37 +288,35 @@ export async function addCreditCard(data: Omit<CreditCard, 'id' | 'createdAt' | 
 }
 
 export async function updateCreditCard(id: string, data: Partial<CreditCard>) {
+  if (!data.userId) throw new Error('userId is required');
   const updatedAt = now();
-  await updateDocWithLegacyFallback(COLLECTIONS.cards, LEGACY_COLLECTIONS.cards, id, { ...data, updatedAt });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.cards);
+  const legacyPath = LEGACY_COLLECTIONS.cards;
+  await updateDocWithLegacyFallback(userPath, legacyPath, id, { ...data, updatedAt });
   markCollectionChanged('cards', data.userId);
   
-  // Update cache
-  if (data.userId) {
-    const cards = getCache<CreditCard[]>('cards', data.userId) || [];
-    const updated = cards.map((c) => (c.id === id ? { ...c, ...data, updatedAt } : c));
-    setCache('cards', updated, data.userId);
-  } else {
-    updateCachedItem<CreditCard>('cards', id, { ...data, updatedAt } as Partial<CreditCard>);
-  }
+  const cards = getCache<CreditCard[]>('cards', data.userId) || [];
+  const updated = cards.map((c) => (c.id === id ? { ...c, ...data, updatedAt } : c));
+  setCache('cards', updated, data.userId);
 }
 
-export async function deleteCreditCard(id: string) {
-  await deleteCardPaymentsForCard(id);
-  await deleteCardChargesForCard(id);
-  await deleteDocFromCollections(id, [COLLECTIONS.cards, LEGACY_COLLECTIONS.cards]);
-  markCollectionChanged('cards');
-  markCollectionChanged('cardPayments');
-  markCollectionChanged('cardCharges');
+export async function deleteCreditCard(id: string, userId: string) {
+  await deleteCardPaymentsForCard(id, userId);
+  await deleteCardChargesForCard(id, userId);
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.cards);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('cards', userId);
+  markCollectionChanged('cardPayments', userId);
+  markCollectionChanged('cardCharges', userId);
   removeCachedItem('cards', id);
 }
 
 export async function getCreditCards(userId: string, options?: GetOptions): Promise<CreditCard[]> {
   return getCachedCollection('cards', userId, async () => {
-    return getDocsFromUserCollections<CreditCard>(
-      userId,
-      [COLLECTIONS.cards, LEGACY_COLLECTIONS.cards],
-      (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')
-    );
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.cards);
+    const q = query(collection(db, userPath), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CreditCard));
   }, options);
 }
 
@@ -322,10 +325,10 @@ export async function getCreditCards(userId: string, options?: GetOptions): Prom
 // ============================================================================
 
 export async function addCardPayment(data: Omit<CardPayment, 'id' | 'createdAt'>) {
-  const paymentDoc = await addDoc(collection(db, COLLECTIONS.cardPayments), { ...data, createdAt: now() });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.cardPayments);
+  const paymentDoc = await addDoc(collection(db, userPath), { ...data, createdAt: now() });
   markCollectionChanged('cardPayments', data.userId);
   
-  // Update cache
   const payments = getCache<CardPayment[]>('cardPayments', data.userId) || [];
   const newPayment: CardPayment = { id: paymentDoc.id, ...data, createdAt: now() };
   setCache('cardPayments', [newPayment, ...payments], data.userId);
@@ -335,17 +338,17 @@ export async function addCardPayment(data: Omit<CardPayment, 'id' | 'createdAt'>
 
 export async function getCardPayments(userId: string, options?: GetOptions): Promise<CardPayment[]> {
   return getCachedCollection('cardPayments', userId, async () => {
-    return getDocsFromUserCollections<CardPayment>(
-      userId,
-      [COLLECTIONS.cardPayments, LEGACY_COLLECTIONS.cardPayments],
-      (a, b) => b.date.localeCompare(a.date)
-    );
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.cardPayments);
+    const q = query(collection(db, userPath), orderBy('date', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CardPayment));
   }, options);
 }
 
-export async function deleteCardPayment(id: string) {
-  await deleteDocFromCollections(id, [COLLECTIONS.cardPayments, LEGACY_COLLECTIONS.cardPayments]);
-  markCollectionChanged('cardPayments');
+export async function deleteCardPayment(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.cardPayments);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('cardPayments', userId);
   removeCachedItem('cardPayments', id);
 }
 
@@ -354,7 +357,8 @@ export async function deleteCardPayment(id: string) {
 // ============================================================================
 
 export async function addCardCharge(data: Omit<CardCharge, 'id' | 'createdAt'>) {
-  const chargeDoc = await addDoc(collection(db, COLLECTIONS.cardCharges), { ...data, createdAt: now() });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.cardCharges);
+  const chargeDoc = await addDoc(collection(db, userPath), { ...data, createdAt: now() });
   markCollectionChanged('cardCharges', data.userId);
 
   const charges = getCache<CardCharge[]>('cardCharges', data.userId) || [];
@@ -366,17 +370,17 @@ export async function addCardCharge(data: Omit<CardCharge, 'id' | 'createdAt'>) 
 
 export async function getCardCharges(userId: string, options?: GetOptions): Promise<CardCharge[]> {
   return getCachedCollection('cardCharges', userId, async () => {
-    return getDocsFromUserCollections<CardCharge>(
-      userId,
-      [COLLECTIONS.cardCharges, LEGACY_COLLECTIONS.cardCharges],
-      (a, b) => b.date.localeCompare(a.date)
-    );
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.cardCharges);
+    const q = query(collection(db, userPath), orderBy('date', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CardCharge));
   }, options);
 }
 
-export async function deleteCardCharge(id: string) {
-  await deleteDocFromCollections(id, [COLLECTIONS.cardCharges, LEGACY_COLLECTIONS.cardCharges]);
-  markCollectionChanged('cardCharges');
+export async function deleteCardCharge(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.cardCharges);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('cardCharges', userId);
   removeCachedItem('cardCharges', id);
 }
 
@@ -385,10 +389,10 @@ export async function deleteCardCharge(id: string) {
 // ============================================================================
 
 export async function addSavingGoal(data: Omit<SavingGoal, 'id' | 'createdAt' | 'updatedAt'>) {
-  const goalDoc = await addDoc(collection(db, COLLECTIONS.goals), { ...data, createdAt: now(), updatedAt: now() });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.goals);
+  const goalDoc = await addDoc(collection(db, userPath), { ...data, createdAt: now(), updatedAt: now() });
   markCollectionChanged('goals', data.userId);
   
-  // Update cache
   const goals = getCache<SavingGoal[]>('goals', data.userId) || [];
   const newGoal: SavingGoal = { id: goalDoc.id, ...data, createdAt: now(), updatedAt: now() };
   setCache('goals', [newGoal, ...goals], data.userId);
@@ -397,33 +401,31 @@ export async function addSavingGoal(data: Omit<SavingGoal, 'id' | 'createdAt' | 
 }
 
 export async function updateSavingGoal(id: string, data: Partial<SavingGoal>) {
+  if (!data.userId) throw new Error('userId is required');
   const updatedAt = now();
-  await updateDocWithLegacyFallback(COLLECTIONS.goals, LEGACY_COLLECTIONS.goals, id, { ...data, updatedAt });
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.goals);
+  const legacyPath = LEGACY_COLLECTIONS.goals;
+  await updateDocWithLegacyFallback(userPath, legacyPath, id, { ...data, updatedAt });
   markCollectionChanged('goals', data.userId);
   
-  // Update cache
-  if (data.userId) {
-    const goals = getCache<SavingGoal[]>('goals', data.userId) || [];
-    const updated = goals.map((g) => (g.id === id ? { ...g, ...data, updatedAt } : g));
-    setCache('goals', updated, data.userId);
-  } else {
-    updateCachedItem<SavingGoal>('goals', id, { ...data, updatedAt } as Partial<SavingGoal>);
-  }
+  const goals = getCache<SavingGoal[]>('goals', data.userId) || [];
+  const updated = goals.map((g) => (g.id === id ? { ...g, ...data, updatedAt } : g));
+  setCache('goals', updated, data.userId);
 }
 
-export async function deleteSavingGoal(id: string) {
-  await deleteDocFromCollections(id, [COLLECTIONS.goals, LEGACY_COLLECTIONS.goals]);
-  markCollectionChanged('goals');
+export async function deleteSavingGoal(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.goals);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('goals', userId);
   removeCachedItem('goals', id);
 }
 
 export async function getSavingGoals(userId: string, options?: GetOptions): Promise<SavingGoal[]> {
   return getCachedCollection('goals', userId, async () => {
-    return getDocsFromUserCollections<SavingGoal>(
-      userId,
-      [COLLECTIONS.goals, LEGACY_COLLECTIONS.goals],
-      (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')
-    );
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.goals);
+    const q = query(collection(db, userPath), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SavingGoal));
   }, options);
 }
 
@@ -431,13 +433,102 @@ export async function getSavingGoals(userId: string, options?: GetOptions): Prom
 // FRIENDS
 // ============================================================================
 
-export async function addFriend(data: Omit<Friend, 'id' | 'createdAt'>) {
-  const friendDoc = await addDoc(collection(db, COLLECTIONS.friends), { ...data, createdAt: now() });
+type FriendInviteInput = Omit<Friend, 'id' | 'createdAt' | 'status'> & {
+  status?: Friend['status'];
+  userEmail?: string | null;
+  userName?: string | null;
+};
+
+async function getExistingFriendByEmail(userId: string, email: string): Promise<Friend | null> {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.friends);
+  const q = query(collection(db, userPath), where('friendEmailLower', '==', normalizeEmail(email)));
+  const snap = await getDocs(q);
+  const first = snap.docs[0];
+  return first ? ({ id: first.id, ...first.data() } as Friend) : null;
+}
+
+async function getReciprocalFriendDocs(friend: Friend) {
+  if (!friend.requesterId || !friend.recipientId) return [];
+
+  const otherUserId = friend.userId === friend.requesterId ? friend.recipientId : friend.requesterId;
+  const otherPath = getUserCollectionPath(otherUserId, COLLECTIONS.friends);
+  const q = query(
+    collection(db, otherPath),
+    where('requesterId', '==', friend.requesterId),
+    where('recipientId', '==', friend.recipientId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs;
+}
+
+export async function addFriend(data: FriendInviteInput) {
+  const userEmail = normalizeEmail(data.userEmail);
+  const targetProfile = await getUserProfileByEmail(data.friendEmail);
+
+  if (!targetProfile) {
+    throw new Error('No account exists with that email yet.');
+  }
+
+  if (targetProfile.uid === data.userId) {
+    throw new Error("You can't add yourself.");
+  }
+
+  const existing = await getExistingFriendByEmail(data.userId, targetProfile.email || data.friendEmail);
+  if (existing && existing.status !== 'rejected') {
+    throw new Error('This person is already in your friends list.');
+  }
+
+  const timestamp = now();
+  const requesterName = data.userName || data.requesterName || userEmail.split('@')[0] || null;
+  const recipientEmail = targetProfile.email || data.friendEmail;
+  const recipientName = targetProfile.displayName || data.friendName || recipientEmail.split('@')[0];
+  const requesterEmail = data.userEmail || data.requesterEmail || null;
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS.friends);
+  const targetPath = getUserCollectionPath(targetProfile.uid, COLLECTIONS.friends);
+
+  const outgoing: Omit<Friend, 'id'> = {
+    userId: data.userId,
+    friendId: targetProfile.uid,
+    friendEmail: recipientEmail,
+    friendEmailLower: normalizeEmail(recipientEmail),
+    friendName: recipientName,
+    status: 'pending',
+    direction: 'outgoing',
+    requesterId: data.userId,
+    requesterEmail,
+    requesterName,
+    recipientId: targetProfile.uid,
+    recipientEmail,
+    recipientName,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const incoming: Omit<Friend, 'id'> = {
+    userId: targetProfile.uid,
+    friendId: data.userId,
+    friendEmail: requesterEmail || userEmail,
+    friendEmailLower: normalizeEmail(requesterEmail || userEmail),
+    friendName: requesterName || requesterEmail || userEmail,
+    status: 'pending',
+    direction: 'incoming',
+    requesterId: data.userId,
+    requesterEmail,
+    requesterName,
+    recipientId: targetProfile.uid,
+    recipientEmail,
+    recipientName,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  const friendDoc = await addDoc(collection(db, userPath), outgoing);
+  await addDoc(collection(db, targetPath), incoming);
   markCollectionChanged('friends', data.userId);
+  markCollectionChanged('friends', targetProfile.uid);
   
-  // Update cache
   const friends = getCache<Friend[]>('friends', data.userId) || [];
-  const newFriend: Friend = { id: friendDoc.id, ...data, createdAt: now() };
+  const newFriend: Friend = { id: friendDoc.id, ...outgoing };
   setCache('friends', [newFriend, ...friends], data.userId);
   
   return friendDoc;
@@ -445,20 +536,60 @@ export async function addFriend(data: Omit<Friend, 'id' | 'createdAt'>) {
 
 export async function getFriends(userId: string, options?: GetOptions): Promise<Friend[]> {
   return getCachedCollection('friends', userId, async () => {
-    const q = query(collection(db, COLLECTIONS.friends), where('userId', '==', userId));
+    const userPath = getUserCollectionPath(userId, COLLECTIONS.friends);
+    const q = query(collection(db, userPath), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Friend));
   }, options);
 }
 
-export async function deleteFriend(id: string) {
-  await deleteDoc(doc(db, COLLECTIONS.friends, id));
-  markCollectionChanged('friends');
+export async function deleteFriend(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.friends);
+  const currentRef = doc(db, userPath, id);
+  const currentSnap = await getDoc(currentRef);
+
+  if (currentSnap.exists()) {
+    const friend = { id: currentSnap.id, ...currentSnap.data() } as Friend;
+    const reciprocalDocs = await getReciprocalFriendDocs(friend);
+    await Promise.allSettled(reciprocalDocs.map((d) => deleteDoc(d.ref)));
+  }
+
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('friends', userId);
   removeCachedItem('friends', id);
 }
 
+export async function acceptFriend(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.friends);
+  const currentRef = doc(db, userPath, id);
+  const currentSnap = await getDoc(currentRef);
+
+  if (!currentSnap.exists()) {
+    throw new Error('Friend invitation not found.');
+  }
+
+  const friend = { id: currentSnap.id, ...currentSnap.data() } as Friend;
+  if (friend.direction !== 'incoming') {
+    throw new Error('Only incoming invitations can be accepted.');
+  }
+
+  const changes = { status: 'accepted' as const, updatedAt: now() };
+  await updateDoc(currentRef, changes);
+
+  const reciprocalDocs = await getReciprocalFriendDocs(friend);
+  await Promise.allSettled(reciprocalDocs.map((d) => updateDoc(d.ref, changes)));
+
+  markCollectionChanged('friends', userId);
+  if (friend.requesterId) markCollectionChanged('friends', friend.requesterId);
+  removeCachedItem('friends', id);
+}
+
+export async function rejectFriend(id: string, userId: string) {
+  await deleteFriend(id, userId);
+}
+
 // ============================================================================
-// BACKWARDS COMPATIBILITY
+// BACKWARDS COMPATIBILITY (Legacy functions)
 // ============================================================================
 
 export async function addCard(data: Omit<CreditCard, 'id' | 'createdAt' | 'updatedAt'>) {
@@ -469,8 +600,8 @@ export async function updateCard(id: string, data: Partial<CreditCard>) {
   return updateCreditCard(id, data);
 }
 
-export async function deleteCard(id: string) {
-  return deleteCreditCard(id);
+export async function deleteCard(id: string, userId: string) {
+  return deleteCreditCard(id, userId);
 }
 
 export async function getCards(userId: string, options?: GetOptions): Promise<CreditCard[]> {
@@ -485,31 +616,29 @@ export async function updateGoal(id: string, data: Partial<SavingGoal>) {
   return updateSavingGoal(id, data);
 }
 
-export async function deleteGoal(id: string) {
-  return deleteSavingGoal(id);
+export async function deleteGoal(id: string, userId: string) {
+  return deleteSavingGoal(id, userId);
 }
 
 export async function getGoals(userId: string, options?: GetOptions): Promise<SavingGoal[]> {
   return getSavingGoals(userId, options);
 }
 
+// ============================================================================
+// DATA PREFETCHING
+// ============================================================================
+
 export function prefetchUserData(userId: string): Promise<unknown[]> {
   if (!navigator.onLine) return Promise.resolve([]);
 
   // Load only critical data first
   return Promise.allSettled([
-    getExpenses(userId, { forceRefresh: true }),
-    getSalaries(userId, { forceRefresh: true }),
-  ]).then(results => {
-    // Load additional data in background (non-blocking)
-    Promise.allSettled([
-      getCreditCards(userId, { forceRefresh: true }),
-      getCardPayments(userId, { forceRefresh: true }),
-      getCardCharges(userId, { forceRefresh: true }),
-      getSavingGoals(userId, { forceRefresh: true }),
-      getFriends(userId, { forceRefresh: true }),
-    ]).catch(error => console.error('Background prefetch failed:', error));
-    
-    return results;
-  });
+    getExpenses(userId),
+    getSalaries(userId),
+    getCreditCards(userId),
+    getCardPayments(userId),
+    getCardCharges(userId),
+    getSavingGoals(userId),
+    getFriends(userId),
+  ]);
 }

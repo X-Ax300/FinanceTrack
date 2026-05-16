@@ -75,8 +75,8 @@ export default function SalaryPage() {
   }
 
   async function handleDelete() {
-    if (!deleteId) return;
-    await deleteSalary(deleteId);
+    if (!deleteId || !currentUser) return;
+    await deleteSalary(deleteId, currentUser.uid);
     setDeleteId(null);
     await load();
   }

@@ -172,10 +172,10 @@ export default function Cards() {
   }
 
   async function handleDeleteCard() {
-    if (!deleteId) return;
+    if (!deleteId || !currentUser) return;
     setError('');
     try {
-      await deleteCard(deleteId);
+      await deleteCard(deleteId, currentUser.uid);
       setDeleteId(null);
       await load(true);
     } catch (err) {
@@ -300,7 +300,7 @@ export default function Cards() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-rose-400">{formatCurrency(charge.amount)}</span>
-                          <button onClick={() => { deleteCardCharge(charge.id!); load(true); }} className="text-gray-600 hover:text-red-400 transition-colors">
+                          <button onClick={() => { if (currentUser) { deleteCardCharge(charge.id!, currentUser.uid); load(true); } }} className="text-gray-600 hover:text-red-400 transition-colors">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -318,7 +318,7 @@ export default function Cards() {
                         <span className={`text-xs ${textSecondary}`}>{MONTHS[p.month - 1]} {p.year}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-emerald-400">{formatCurrency(p.amount)}</span>
-                          <button onClick={() => { deleteCardPayment(p.id!); load(true); }} className="text-gray-600 hover:text-red-400 transition-colors">
+                          <button onClick={() => { if (currentUser) { deleteCardPayment(p.id!, currentUser.uid); load(true); } }} className="text-gray-600 hover:text-red-400 transition-colors">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>

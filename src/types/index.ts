@@ -100,9 +100,18 @@ export interface Friend {
   userId: string;
   friendId: string;
   friendEmail: string;
+  friendEmailLower?: string;
   friendName?: string;
   status: 'pending' | 'accepted' | 'rejected';
+  direction?: 'incoming' | 'outgoing';
+  requesterId?: string;
+  requesterEmail?: string | null;
+  requesterName?: string | null;
+  recipientId?: string;
+  recipientEmail?: string | null;
+  recipientName?: string | null;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface Notification {

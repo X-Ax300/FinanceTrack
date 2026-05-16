@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Plus, UserPlus, Trash2, Users, Mail, CheckCircle, Clock } from 'lucide-react';
+import { UserPlus, Trash2, Users, Mail, CheckCircle, Clock, XCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getFriends, addFriend, deleteFriend } from '../lib/firestore';
+import { getFriends, addFriend, deleteFriend, acceptFriend, rejectFriend } from '../lib/firestore';
+import { useNotifications } from '../hooks/useNotifications';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -12,6 +13,7 @@ import type { Friend } from '../types';
 export default function Friends() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { notifySuccess, notifyError } = useNotifications();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -19,49 +21,107 @@ export default function Friends() {
   const [email, setEmail] = useState('');
   const [friendName, setFriendName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
 
   async function load() {
-    if (!currentUser) return;
-    const data = await getFriends(currentUser.uid);
-    setFriends(data);
-    setLoading(false);
+    if (!currentUser) {
+      setFriends([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const data = await getFriends(currentUser.uid, { forceRefresh: true });
+      setFriends(data);
+    } catch {
+      notifyError('Error', 'No se pudo cargar la lista de amigos');
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { load(); }, [currentUser]);
 
   async function handleInvite() {
-    if (!currentUser || !email) return;
+    if (!currentUser || !email.trim()) return;
+    const cleanEmail = email.trim().toLowerCase();
     setError('');
-    if (email === currentUser.email) { setError("You can't add yourself."); return; }
-    if (friends.some((f) => f.friendEmail === email)) { setError('This person is already in your list.'); return; }
+    if (cleanEmail === currentUser.email?.toLowerCase()) { setError("You can't add yourself."); return; }
+    if (friends.some((f) => f.friendEmail.toLowerCase() === cleanEmail && f.status !== 'rejected')) {
+      setError('This person is already in your list.');
+      return;
+    }
     setSaving(true);
-    await addFriend({
-      userId: currentUser.uid,
-      friendId: email,
-      friendEmail: email,
-      friendName: friendName || undefined,
-      status: 'pending',
-    });
-    await load();
-    setModalOpen(false);
-    setEmail('');
-    setFriendName('');
-    setSaving(false);
+    try {
+      await addFriend({
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        userName: currentUser.displayName,
+        friendId: cleanEmail,
+        friendEmail: cleanEmail,
+        friendName: friendName || undefined,
+      });
+      notifySuccess('Invitación enviada', `${cleanEmail} verá tu solicitud en Friends`);
+      await load();
+      setModalOpen(false);
+      setEmail('');
+      setFriendName('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'No se pudo enviar la invitación';
+      setError(message);
+      notifyError('Error', message);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDelete() {
-    if (!deleteId) return;
-    await deleteFriend(deleteId);
-    setDeleteId(null);
-    await load();
+    if (!deleteId || !currentUser) return;
+    try {
+      await deleteFriend(deleteId, currentUser.uid);
+      notifySuccess('Amigo eliminado', 'El contacto fue removido de tu lista');
+      setDeleteId(null);
+      await load();
+    } catch (err) {
+      notifyError('Error', 'No se pudo eliminar el amigo');
+    }
+  }
+
+  async function handleAccept(friendId: string) {
+    if (!currentUser) return;
+    setActionId(friendId);
+    try {
+      await acceptFriend(friendId, currentUser.uid);
+      notifySuccess('Invitación aceptada', 'Ahora esta persona puede ver tu resumen financiero');
+      await load();
+    } catch (err) {
+      notifyError('Error', err instanceof Error ? err.message : 'No se pudo aceptar la invitación');
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function handleReject(friendId: string) {
+    if (!currentUser) return;
+    setActionId(friendId);
+    try {
+      await rejectFriend(friendId, currentUser.uid);
+      notifySuccess('Invitación rechazada', 'La solicitud fue eliminada');
+      await load();
+    } catch {
+      notifyError('Error', 'No se pudo rechazar la invitación');
+    } finally {
+      setActionId(null);
+    }
   }
 
   const accepted = friends.filter((f) => f.status === 'accepted');
-  const pending = friends.filter((f) => f.status === 'pending');
+  const incoming = friends.filter((f) => f.status === 'pending' && f.direction === 'incoming');
+  const outgoing = friends.filter((f) => f.status === 'pending' && f.direction !== 'incoming');
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -84,8 +144,8 @@ export default function Friends() {
           <div>
             <p className={`text-sm font-medium ${textPrimary}`}>Shared Financial View</p>
             <p className={`text-xs mt-1 ${textSecondary}`}>
-              Friends you invite can view your balance, expenses, and statistics — but they cannot edit or modify any data.
-              Invitations are sent by email.
+              Friends you invite can view your balance, expenses, and statistics, but they cannot edit or modify any data.
+              The invited person must already have a FinanceTrack account with that email.
             </p>
           </div>
         </div>
@@ -125,13 +185,48 @@ export default function Friends() {
         </div>
       )}
 
-      {/* Pending */}
-      {pending.length > 0 && (
+      {/* Incoming */}
+      {incoming.length > 0 && (
         <div>
-          <h2 className={`text-sm font-medium mb-3 ${textSecondary}`}>Pending Invitations ({pending.length})</h2>
+          <h2 className={`text-sm font-medium mb-3 ${textSecondary}`}>Invitaciones recibidas ({incoming.length})</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {pending.map((f) => (
-              <Card key={f.id} className="p-4 opacity-70">
+            {incoming.map((f) => (
+              <Card key={f.id} className="p-4 border-cyan-500/20 bg-cyan-500/5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`}>
+                      <Mail className={`w-5 h-5 ${textSecondary}`} />
+                    </div>
+                    <div>
+                      <p className={`text-sm font-medium ${textPrimary}`}>{f.friendName || f.friendEmail.split('@')[0]}</p>
+                      <p className={`text-xs ${textSecondary}`}>{f.friendEmail}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className={`mt-3 pt-3 border-t ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+                  <p className={`text-xs mb-3 ${textSecondary}`}>Quiere acceder a tu resumen financiero en modo lectura.</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" className="flex-1" onClick={() => handleAccept(f.id!)} loading={actionId === f.id}>
+                      <CheckCircle className="w-3.5 h-3.5" /> Aceptar
+                    </Button>
+                    <Button size="sm" variant="danger" className="flex-1" onClick={() => handleReject(f.id!)} disabled={actionId === f.id}>
+                      <XCircle className="w-3.5 h-3.5" /> Rechazar
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Outgoing */}
+      {outgoing.length > 0 && (
+        <div>
+          <h2 className={`text-sm font-medium mb-3 ${textSecondary}`}>Invitaciones enviadas ({outgoing.length})</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {outgoing.map((f) => (
+              <Card key={f.id} className="p-4 opacity-80">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-100'}`}>
@@ -148,7 +243,7 @@ export default function Friends() {
                 </div>
                 <div className={`mt-3 pt-3 border-t text-xs ${theme === 'dark' ? 'border-gray-800 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
                   <Clock className="w-3 h-3 inline mr-1 text-amber-400" />
-                  Invitation pending
+                  Esperando respuesta
                 </div>
               </Card>
             ))}
@@ -187,7 +282,7 @@ export default function Friends() {
             placeholder="John Doe"
           />
           <p className={`text-xs ${textSecondary}`}>
-            Your friend will receive an invitation link. They can view your financial summary but cannot edit any data.
+            Your friend will see the invitation inside their Friends page. They can view your financial summary but cannot edit any data.
           </p>
           <div className="flex gap-3 pt-2">
             <Button variant="ghost" className="flex-1" onClick={() => setModalOpen(false)}>Cancel</Button>

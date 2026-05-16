@@ -8,6 +8,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNotifications } from '../hooks/useNotifications';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -31,11 +32,27 @@ export default function Layout({ children }: LayoutProps) {
   const { currentUser, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useLanguage();
+  const { canNotify, isGranted, permission, requestPermission, notifySuccess } = useNotifications();
   const navigate = useNavigate();
+  const [requestingNotifications, setRequestingNotifications] = useState(false);
 
   async function handleLogout() {
     await logout();
     navigate('/login');
+  }
+
+  async function handleNotificationPermission() {
+    if (!canNotify || isGranted || requestingNotifications) return;
+
+    setRequestingNotifications(true);
+    try {
+      const granted = await requestPermission();
+      if (granted) {
+        notifySuccess('Notificaciones activadas', 'FinanceTrack ya puede enviarte alertas web.');
+      }
+    } finally {
+      setRequestingNotifications(false);
+    }
   }
 
   return (
@@ -158,11 +175,38 @@ export default function Layout({ children }: LayoutProps) {
 
           <div className="flex-1" />
 
-          <button className={`relative p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}>
+          <button
+            onClick={handleNotificationPermission}
+            className={`relative p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
+            title={isGranted ? 'Notificaciones habilitadas' : 'Habilitar notificaciones'}
+          >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/80" />
+            {!isGranted && permission === 'default' && (
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/80" />
+            )}
           </button>
         </header>
+
+        {canNotify && !isGranted && permission === 'default' && (
+          <div className={`px-4 lg:px-6 py-3 border-b ${theme === 'dark' ? 'bg-cyan-500/10 border-cyan-500/20' : 'bg-cyan-50 border-cyan-100'}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Bell className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+                <p className={`text-sm ${theme === 'dark' ? 'text-cyan-50' : 'text-cyan-950'}`}>
+                  Activa las notificaciones web para recibir alertas de FinanceTrack.
+                </p>
+              </div>
+              <button
+                onClick={handleNotificationPermission}
+                disabled={requestingNotifications}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-400 disabled:opacity-60"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                {requestingNotifications ? 'Solicitando...' : 'Permitir notificaciones'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <main className="flex-1 p-4 lg:p-6 overflow-auto">
           {children}

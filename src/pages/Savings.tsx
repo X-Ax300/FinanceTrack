@@ -93,8 +93,8 @@ export default function Savings() {
   }
 
   async function handleDelete() {
-    if (!deleteId) return;
-    await deleteGoal(deleteId);
+    if (!deleteId || !currentUser) return;
+    await deleteGoal(deleteId, currentUser.uid);
     setDeleteId(null);
     await load();
   }

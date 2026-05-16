@@ -36,7 +36,7 @@ export async function processSyncQueue(userId: string): Promise<void> {
 
   for (const item of queue) {
     try {
-      await processSyncItem(item);
+      await processSyncItem(item, userId);
       removeSyncQueueItem(userId, item.id);
     } catch (error) {
       console.error(`Failed to sync item ${item.id}:`, error);
@@ -45,69 +45,72 @@ export async function processSyncQueue(userId: string): Promise<void> {
   }
 }
 
-async function processSyncItem(item: SyncQueueItem): Promise<void> {
+async function processSyncItem(item: SyncQueueItem, userId: string): Promise<void> {
   const { collection, type, data } = item;
+  const payload = data as any;
+  const itemId = String(payload.id || '');
+  const ownerId = String(payload.userId || userId);
 
   switch (collection) {
     case 'expenses':
       if (type === 'add') {
-        await addExpense(data);
+        await addExpense(payload);
       } else if (type === 'update') {
-        const { id, ...rest } = data;
-        await updateExpense(id, rest);
+        const { id, ...rest } = payload;
+        await updateExpense(String(id), rest);
       } else if (type === 'delete') {
-        await deleteExpense(data.id);
+        await deleteExpense(itemId, ownerId);
       }
       break;
 
     case 'salaries':
       if (type === 'add') {
-        await addSalary(data);
+        await addSalary(payload);
       } else if (type === 'update') {
-        const { id, ...rest } = data;
-        await updateSalary(id, rest);
+        const { id, ...rest } = payload;
+        await updateSalary(String(id), rest);
       } else if (type === 'delete') {
-        await deleteSalary(data.id);
+        await deleteSalary(itemId, ownerId);
       }
       break;
 
     case 'credit_cards':
       if (type === 'add') {
-        await addCreditCard(data);
+        await addCreditCard(payload);
       } else if (type === 'update') {
-        const { id, ...rest } = data;
-        await updateCreditCard(id, rest);
+        const { id, ...rest } = payload;
+        await updateCreditCard(String(id), rest);
       } else if (type === 'delete') {
-        await deleteCreditCard(data.id);
+        await deleteCreditCard(itemId, ownerId);
       }
       break;
 
     case 'card_payments':
     case 'cardPayments':
       if (type === 'add') {
-        await addCardPayment(data);
+        await addCardPayment(payload);
       } else if (type === 'delete') {
-        await deleteCardPayment(data.id);
+        await deleteCardPayment(itemId, ownerId);
       }
       break;
 
     case 'card_charges':
     case 'cardCharges':
       if (type === 'add') {
-        await addCardCharge(data);
+        await addCardCharge(payload);
       } else if (type === 'delete') {
-        await deleteCardCharge(data.id);
+        await deleteCardCharge(itemId, ownerId);
       }
       break;
 
     case 'saving_goals':
       if (type === 'add') {
-        await addSavingGoal(data);
+        await addSavingGoal(payload);
       } else if (type === 'update') {
-        const { id, ...rest } = data;
-        await updateSavingGoal(id, rest);
+        const { id, ...rest } = payload;
+        await updateSavingGoal(String(id), rest);
       } else if (type === 'delete') {
-        await deleteSavingGoal(data.id);
+        await deleteSavingGoal(itemId, ownerId);
       }
       break;
 

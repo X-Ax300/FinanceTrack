@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getExpenses, addExpense, updateExpense, deleteExpense, getCards, getCardCharges, deleteCardCharge } from '../lib/firestore';
 import { combineExpensesWithCardCharges, formatCurrency, formatDate, CATEGORY_LABELS, CATEGORY_COLORS, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
+import { useNotifications } from '../hooks/useNotifications';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -22,6 +23,7 @@ const emptyForm = {
 export default function Expenses() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { notifySuccess, notifyError } = useNotifications();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
@@ -70,34 +72,47 @@ export default function Expenses() {
   async function handleSave() {
     if (!currentUser || !form.name || !form.amount) return;
     setSaving(true);
-    const data = {
-      userId: currentUser.uid,
-      name: form.name,
-      category: form.category,
-      amount: parseFloat(form.amount),
-      method: form.method,
-      date: form.date,
-      description: form.description,
-    };
-    if (editId) {
-      await updateExpense(editId, data);
-    } else {
-      await addExpense(data);
+    try {
+      const data = {
+        userId: currentUser.uid,
+        name: form.name,
+        category: form.category,
+        amount: parseFloat(form.amount),
+        method: form.method,
+        date: form.date,
+        description: form.description,
+      };
+      if (editId) {
+        await updateExpense(editId, data);
+        notifySuccess('Gasto actualizado', `${form.name} se actualizó correctamente`);
+      } else {
+        await addExpense(data);
+        notifySuccess('Gasto registrado', `${form.name} por ${formatCurrency(parseFloat(form.amount))}`);
+      }
+      await load();
+      setModalOpen(false);
+    } catch (error) {
+      notifyError('Error', 'No se pudo guardar el gasto');
+    } finally {
+      setSaving(false);
     }
-    await load();
-    setModalOpen(false);
-    setSaving(false);
   }
 
   async function handleDelete() {
-    if (!deleteId) return;
-    if (deleteId.startsWith('card-charge-')) {
-      await deleteCardCharge(deleteId.replace('card-charge-', ''));
-    } else {
-      await deleteExpense(deleteId);
+    if (!deleteId || !currentUser) return;
+    try {
+      if (deleteId.startsWith('card-charge-')) {
+        await deleteCardCharge(deleteId.replace('card-charge-', ''), currentUser.uid);
+        notifySuccess('Carga eliminada', 'La carga de tarjeta fue eliminada');
+      } else {
+        await deleteExpense(deleteId, currentUser.uid);
+        notifySuccess('Gasto eliminado', 'El gasto fue eliminado correctamente');
+      }
+      setDeleteId(null);
+      await load();
+    } catch (error) {
+      notifyError('Error', 'No se pudo eliminar el gasto');
     }
-    setDeleteId(null);
-    await load();
   }
 
   const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);

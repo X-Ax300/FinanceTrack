@@ -12,7 +12,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { processSyncQueue, setupSyncListener } from '../lib/cacheSync';
-import { prefetchUserData } from '../lib/firestore';
+import { prefetchUserData, upsertUserProfile } from '../lib/firestore';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -66,6 +66,13 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
       unsubscribeSyncRef.current = null;
       
       if (user) {
+        upsertUserProfile({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        }).catch((error) => console.error('Profile sync failed:', error));
+
         unsubscribeSyncRef.current = setupSyncListener(user.uid);
         
         // Non-blocking prefetch in background

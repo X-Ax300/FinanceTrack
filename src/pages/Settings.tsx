@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Shield, Palette, LogOut, Save, Eye, EyeOff, Languages } from 'lucide-react';
+import { User, Shield, Palette, LogOut, Save, Eye, EyeOff, Languages, Bell } from 'lucide-react';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,6 +9,7 @@ import { CURRENCIES, getStoredCurrency } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { NotificationSettings } from '../components/NotificationSettings';
 
 export default function Settings() {
   const { currentUser, logout } = useAuth();
@@ -218,6 +219,17 @@ export default function Settings() {
             </select>
           </div>
         </div>
+      </Card>
+
+      {/* Notifications */}
+      <Card className="p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+            <Bell className="w-4 h-4 text-purple-400" />
+          </div>
+          <h2 className={`text-base font-semibold ${textPrimary}`}>{t('Notifications')}</h2>
+        </div>
+        <NotificationSettings />
       </Card>
 
       {/* Danger */}
