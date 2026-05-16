@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Target, TrendingUp, Calendar } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { getGoals, addGoal, updateGoal, deleteGoal } from '../lib/firestore';
 import { formatCurrency, formatDate } from '../lib/utils';
 import Card from '../components/ui/Card';
@@ -39,6 +40,7 @@ const emptyForm = {
 export default function Savings() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [goals, setGoals] = useState<SavingGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -99,13 +101,6 @@ export default function Savings() {
     await load();
   }
 
-  function monthsToGoal(goal: SavingGoal, monthlySaving: number): number | null {
-    if (monthlySaving <= 0) return null;
-    const remaining = goal.targetAmount - goal.currentAmount;
-    if (remaining <= 0) return 0;
-    return Math.ceil(remaining / monthlySaving);
-  }
-
   const totalSaved = goals.reduce((a, g) => a + g.currentAmount, 0);
   const totalTarget = goals.reduce((a, g) => a + g.targetAmount, 0);
   const completed = goals.filter((g) => g.currentAmount >= g.targetAmount).length;
@@ -116,26 +111,26 @@ export default function Savings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>Saving Goals</h1>
-          <p className={`text-sm mt-1 ${textSecondary}`}>{goals.length} goals — {completed} completed</p>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Saving Goals')}</h1>
+          <p className={`text-sm mt-1 ${textSecondary}`}>{goals.length} {t('goals')} - {completed} {t('completed')}</p>
         </div>
         <Button onClick={() => { setEditId(null); setForm(emptyForm); setModalOpen(true); }} size="sm">
-          <Plus className="w-4 h-4" /> New Goal
+          <Plus className="w-4 h-4" /> {t('New Goal')}
         </Button>
       </div>
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-5">
-          <p className={`text-sm ${textSecondary} mb-1`}>Total Saved</p>
+          <p className={`text-sm ${textSecondary} mb-1`}>{t('Total Saved')}</p>
           <p className="text-2xl font-bold text-emerald-400">{formatCurrency(totalSaved)}</p>
         </Card>
         <Card className="p-5">
-          <p className={`text-sm ${textSecondary} mb-1`}>Total Target</p>
+          <p className={`text-sm ${textSecondary} mb-1`}>{t('Total Target')}</p>
           <p className={`text-2xl font-bold ${textPrimary}`}>{formatCurrency(totalTarget)}</p>
         </Card>
         <Card className="p-5">
-          <p className={`text-sm ${textSecondary} mb-1`}>Overall Progress</p>
+          <p className={`text-sm ${textSecondary} mb-1`}>{t('Overall Progress')}</p>
           <p className={`text-2xl font-bold text-cyan-400`}>
             {totalTarget > 0 ? ((totalSaved / totalTarget) * 100).toFixed(1) : 0}%
           </p>
@@ -160,7 +155,7 @@ export default function Savings() {
                   </div>
                   <div>
                     <p className={`font-semibold ${textPrimary}`}>{goal.name}</p>
-                    <p className={`text-xs ${textSecondary}`}>{catInfo?.label}</p>
+                    <p className={`text-xs ${textSecondary}`}>{t(catInfo?.label || 'Other')}</p>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -179,7 +174,7 @@ export default function Savings() {
               {/* Progress */}
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
-                  <span className={textSecondary}>Progress</span>
+                  <span className={textSecondary}>{t('Progress')}</span>
                   <span className={`font-semibold`} style={{ color }}>{pct.toFixed(1)}%</span>
                 </div>
                 <div className={`w-full h-2 rounded-full ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
@@ -189,25 +184,25 @@ export default function Savings() {
                   />
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className={textSecondary}>{formatCurrency(goal.currentAmount)} saved</span>
-                  <span className={textSecondary}>{formatCurrency(goal.targetAmount)} goal</span>
+                  <span className={textSecondary}>{formatCurrency(goal.currentAmount)} {t('saved')}</span>
+                  <span className={textSecondary}>{formatCurrency(goal.targetAmount)} {t('goal')}</span>
                 </div>
               </div>
 
               {/* Info */}
               <div className="space-y-1 text-xs mb-4">
-                {!done && <p className={textSecondary}>Remaining: <span className={`font-medium ${textPrimary}`}>{formatCurrency(remaining)}</span></p>}
+                {!done && <p className={textSecondary}>{t('Remaining')}: <span className={`font-medium ${textPrimary}`}>{formatCurrency(remaining)}</span></p>}
                 {goal.deadline && (
                   <p className={textSecondary}>
                     <Calendar className="w-3 h-3 inline mr-1" />
-                    Deadline: {formatDate(goal.deadline)}
+                    {t('Deadline')}: {formatDate(goal.deadline)}
                   </p>
                 )}
               </div>
 
               {done ? (
                 <div className="text-center py-2 rounded-xl bg-emerald-500/10 text-emerald-400 text-sm font-medium">
-                  Goal Achieved!
+                  {t('Goal Achieved!')}
                 </div>
               ) : (
                 <Button
@@ -216,7 +211,7 @@ export default function Savings() {
                   className="w-full"
                   onClick={() => { setAddFundsId(goal.id!); setFundsAmount(''); }}
                 >
-                  <TrendingUp className="w-3.5 h-3.5" /> Add Funds
+                  <TrendingUp className="w-3.5 h-3.5" /> {t('Add Funds')}
                 </Button>
               )}
             </Card>
@@ -230,48 +225,48 @@ export default function Savings() {
             onClick={() => { setEditId(null); setForm(emptyForm); setModalOpen(true); }}
           >
             <Target className="w-10 h-10 mb-3" />
-            <p className="text-sm font-medium">No saving goals yet</p>
-            <p className="text-xs mt-1">Click to create your first goal</p>
+            <p className="text-sm font-medium">{t('No saving goals yet')}</p>
+            <p className="text-xs mt-1">{t('Click to create your first goal')}</p>
           </div>
         )}
       </div>
 
       {/* Add/Edit Modal */}
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? 'Edit Goal' : 'New Saving Goal'}>
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? t('Edit Goal') : t('New Saving Goal')}>
         <div className="space-y-4">
-          <Input label="Goal Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Trip to Japan, Emergency Fund..." required />
-          <Select label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as GoalCategory })}>
-            {GOAL_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+          <Input label={t('Goal Name')} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('Trip to Japan, Emergency Fund...')} required />
+          <Select label={t('Category')} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value as GoalCategory })}>
+            {GOAL_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.icon} {t(c.label)}</option>)}
           </Select>
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Target Amount" type="number" min="0" step="0.01" value={form.targetAmount} onChange={(e) => setForm({ ...form, targetAmount: e.target.value })} placeholder="5000" required />
-            <Input label="Already Saved" type="number" min="0" step="0.01" value={form.currentAmount} onChange={(e) => setForm({ ...form, currentAmount: e.target.value })} placeholder="0" />
+            <Input label={t('Target Amount')} type="number" min="0" step="0.01" value={form.targetAmount} onChange={(e) => setForm({ ...form, targetAmount: e.target.value })} placeholder="5000" required />
+            <Input label={t('Already Saved')} type="number" min="0" step="0.01" value={form.currentAmount} onChange={(e) => setForm({ ...form, currentAmount: e.target.value })} placeholder="0" />
           </div>
-          <Input label="Deadline (optional)" type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
+          <Input label={t('Deadline (optional)')} type="date" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
           <div className="flex gap-3 pt-2">
-            <Button variant="ghost" className="flex-1" onClick={() => setModalOpen(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleSave} loading={saving}>{editId ? 'Save Changes' : 'Create Goal'}</Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setModalOpen(false)}>{t('Cancel')}</Button>
+            <Button className="flex-1" onClick={handleSave} loading={saving}>{editId ? t('Save Changes') : t('Create Goal')}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Add funds modal */}
-      <Modal open={!!addFundsId} onClose={() => setAddFundsId(null)} title="Add Funds">
+      <Modal open={!!addFundsId} onClose={() => setAddFundsId(null)} title={t('Add Funds')}>
         <div className="space-y-4">
-          <Input label="Amount to Add" type="number" min="0" step="0.01" value={fundsAmount} onChange={(e) => setFundsAmount(e.target.value)} placeholder="100.00" required />
+          <Input label={t('Amount to Add')} type="number" min="0" step="0.01" value={fundsAmount} onChange={(e) => setFundsAmount(e.target.value)} placeholder="100.00" required />
           <div className="flex gap-3 pt-2">
-            <Button variant="ghost" className="flex-1" onClick={() => setAddFundsId(null)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleAddFunds}>Add Funds</Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setAddFundsId(null)}>{t('Cancel')}</Button>
+            <Button className="flex-1" onClick={handleAddFunds}>{t('Add Funds')}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Delete */}
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Goal">
-        <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-6`}>This will permanently delete this saving goal.</p>
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title={t('Delete Goal')}>
+        <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-6`}>{t('This will permanently delete this saving goal.')}</p>
         <div className="flex gap-3">
-          <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>Cancel</Button>
-          <Button variant="danger" className="flex-1" onClick={handleDelete}>Delete</Button>
+          <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>{t('Cancel')}</Button>
+          <Button variant="danger" className="flex-1" onClick={handleDelete}>{t('Delete')}</Button>
         </div>
       </Modal>
     </div>

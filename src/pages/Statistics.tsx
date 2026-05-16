@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
 import {
   combineExpensesWithCardCharges,
@@ -17,6 +18,7 @@ import type { CardCharge, CreditCard, Expense, Salary, ExpenseCategory } from '.
 export default function Statistics() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
@@ -66,7 +68,7 @@ export default function Statistics() {
   const pieData = Object.entries(catMap)
     .sort((a, b) => b[1] - a[1])
     .map(([cat, amt]) => ({
-      name: CATEGORY_LABELS[cat as ExpenseCategory] || cat,
+      name: t(CATEGORY_LABELS[cat as ExpenseCategory] || cat),
       value: amt,
       pct: totalExpense > 0 ? ((amt / totalExpense) * 100).toFixed(1) : '0',
       color: CATEGORY_COLORS[cat as ExpenseCategory] || '#6b7280',
@@ -80,14 +82,14 @@ export default function Statistics() {
       const d = new Date(e.date);
       return d.getMonth() + 1 === m && d.getFullYear() === selectedYear;
     }).reduce((a, e) => a + e.amount, 0);
-    return { month: MONTHS[m - 1].slice(0, 3), income: inc, expenses: exp, savings: Math.max(0, inc - exp) };
+    return { month: t(MONTHS[m - 1]).slice(0, 3), income: inc, expenses: exp, savings: Math.max(0, inc - exp) };
   });
 
   // Category bar data
   const barData = Object.entries(catMap)
     .sort((a, b) => b[1] - a[1])
     .map(([cat, amt]) => ({
-      name: CATEGORY_LABELS[cat as ExpenseCategory]?.slice(0, 8) || cat,
+      name: t(CATEGORY_LABELS[cat as ExpenseCategory] || cat).slice(0, 8),
       amount: amt,
       color: CATEGORY_COLORS[cat as ExpenseCategory] || '#6b7280',
     }));
@@ -108,8 +110,8 @@ export default function Statistics() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>Statistics</h1>
-          <p className={`text-sm mt-1 ${textSecondary}`}>Analyze your financial patterns</p>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Statistics')}</h1>
+          <p className={`text-sm mt-1 ${textSecondary}`}>{t('Analyze your financial patterns')}</p>
         </div>
         <div className="flex gap-3">
           <select
@@ -117,7 +119,7 @@ export default function Statistics() {
             onChange={(e) => setSelectedMonth(Number(e.target.value))}
             className={`px-3 py-2 rounded-xl text-sm border outline-none ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-200 text-gray-900'}`}
           >
-            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{t(m)}</option>)}
           </select>
           <select
             value={selectedYear}
@@ -138,7 +140,7 @@ export default function Statistics() {
           { label: 'Avg Monthly Expense', value: formatCurrency(avgMonthly), color: 'text-amber-400' },
         ].map((item) => (
           <Card key={item.label} className="p-4">
-            <p className={`text-xs ${textSecondary} mb-1`}>{item.label}</p>
+            <p className={`text-xs ${textSecondary} mb-1`}>{t(item.label)}</p>
             <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
           </Card>
         ))}
@@ -148,7 +150,7 @@ export default function Statistics() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Pie */}
         <Card className="p-6">
-          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>Spending Distribution</h3>
+          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>{t('Spending Distribution')}</h3>
           {pieData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={200}>
@@ -156,7 +158,7 @@ export default function Statistics() {
                   <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} innerRadius={50} paddingAngle={3} dataKey="value">
                     {pieData.map((e, i) => <Cell key={i} fill={e.color} />)}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatCurrency(v)} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatCurrency(Number(v || 0))} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="mt-3 space-y-2">
@@ -175,44 +177,44 @@ export default function Statistics() {
               </div>
             </>
           ) : (
-            <p className={`text-center py-16 text-sm ${textSecondary}`}>No data for selected period</p>
+            <p className={`text-center py-16 text-sm ${textSecondary}`}>{t('No data for selected period')}</p>
           )}
         </Card>
 
         {/* Bar by category */}
         <Card className="p-6">
-          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>Expenses by Category</h3>
+          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>{t('Expenses by Category')}</h3>
           {barData.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 20, top: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#1f2937' : '#e5e7eb'} horizontal={false} />
                 <XAxis type="number" tick={{ fill: theme === 'dark' ? '#6b7280' : '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} />
                 <YAxis dataKey="name" type="category" tick={{ fill: theme === 'dark' ? '#9ca3af' : '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} width={65} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatCurrency(v)} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatCurrency(Number(v || 0))} />
                 <Bar dataKey="amount" radius={[0, 6, 6, 0]}>
                   {barData.map((e, i) => <Cell key={i} fill={e.color} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className={`text-center py-16 text-sm ${textSecondary}`}>No data for selected period</p>
+            <p className={`text-center py-16 text-sm ${textSecondary}`}>{t('No data for selected period')}</p>
           )}
         </Card>
       </div>
 
       {/* Line trend */}
       <Card className="p-6">
-        <h3 className={`text-base font-semibold mb-6 ${textPrimary}`}>Annual Financial Overview — {selectedYear}</h3>
+        <h3 className={`text-base font-semibold mb-6 ${textPrimary}`}>{t('Annual Financial Overview')} - {selectedYear}</h3>
         <ResponsiveContainer width="100%" height={250}>
           <LineChart data={trendData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? '#1f2937' : '#e5e7eb'} />
             <XAxis dataKey="month" tick={{ fill: theme === 'dark' ? '#6b7280' : '#9ca3af', fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fill: theme === 'dark' ? '#6b7280' : '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v >= 1000 ? (v / 1000).toFixed(1) + 'k' : v}`} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => formatCurrency(v)} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(v) => formatCurrency(Number(v || 0))} />
             <Legend />
-            <Line type="monotone" dataKey="income" stroke="#06b6d4" strokeWidth={2.5} dot={{ fill: '#06b6d4', r: 4 }} name="Income" />
-            <Line type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={2.5} dot={{ fill: '#f43f5e', r: 4 }} name="Expenses" />
-            <Line type="monotone" dataKey="savings" stroke="#22c55e" strokeWidth={2} strokeDasharray="5 5" dot={false} name="Savings" />
+            <Line type="monotone" dataKey="income" stroke="#06b6d4" strokeWidth={2.5} dot={{ fill: '#06b6d4', r: 4 }} name={t('Income')} />
+            <Line type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={2.5} dot={{ fill: '#f43f5e', r: 4 }} name={t('Expenses')} />
+            <Line type="monotone" dataKey="savings" stroke="#22c55e" strokeWidth={2} strokeDasharray="5 5" dot={false} name={t('Savings')} />
           </LineChart>
         </ResponsiveContainer>
       </Card>
@@ -220,45 +222,45 @@ export default function Statistics() {
       {/* Insights */}
       {pieData.length > 0 && (
         <Card className="p-6">
-          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>Insights</h3>
+          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>{t('Insights')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {topCat && (
               <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-                <p className={`text-xs ${textSecondary} mb-1`}>Top Spending Category</p>
+                <p className={`text-xs ${textSecondary} mb-1`}>{t('Top Spending Category')}</p>
                 <p className={`text-base font-bold ${textPrimary}`}>{topCat.name}</p>
                 <p className="text-sm text-rose-400 font-medium">{formatCurrency(topCat.value)} ({topCat.pct}%)</p>
               </div>
             )}
             <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Savings Rate</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>{t('Savings Rate')}</p>
               <p className={`text-base font-bold ${textPrimary}`}>
                 {totalIncome > 0 ? (((totalIncome - totalExpense) / totalIncome) * 100).toFixed(1) : 0}%
               </p>
-              <p className={`text-sm ${textSecondary}`}>of income saved</p>
+              <p className={`text-sm ${textSecondary}`}>{t('of income saved')}</p>
             </div>
             <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Daily Average Spend</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>{t('Daily Average Spend')}</p>
               <p className={`text-base font-bold ${textPrimary}`}>{formatCurrency(totalExpense / 30)}</p>
-              <p className={`text-sm ${textSecondary}`}>per day this month</p>
+              <p className={`text-sm ${textSecondary}`}>{t('per day this month')}</p>
             </div>
             <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Transactions</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>{t('Transactions')}</p>
               <p className={`text-base font-bold ${textPrimary}`}>{monthExpenses.length}</p>
-              <p className={`text-sm ${textSecondary}`}>this month</p>
+              <p className={`text-sm ${textSecondary}`}>{t('this month')}</p>
             </div>
             <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>Avg per Transaction</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>{t('Avg per Transaction')}</p>
               <p className={`text-base font-bold ${textPrimary}`}>
                 {formatCurrency(monthExpenses.length ? totalExpense / monthExpenses.length : 0)}
               </p>
-              <p className={`text-sm ${textSecondary}`}>average spend</p>
+              <p className={`text-sm ${textSecondary}`}>{t('average spend')}</p>
             </div>
             <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
-              <p className={`text-xs ${textSecondary} mb-1`}>vs. Monthly Average</p>
+              <p className={`text-xs ${textSecondary} mb-1`}>{t('vs. Monthly Average')}</p>
               <p className={`text-base font-bold ${totalExpense > avgMonthly ? 'text-rose-400' : 'text-emerald-400'}`}>
                 {totalExpense > avgMonthly ? '+' : ''}{formatCurrency(totalExpense - avgMonthly)}
               </p>
-              <p className={`text-sm ${textSecondary}`}>{totalExpense > avgMonthly ? 'above' : 'below'} average</p>
+              <p className={`text-sm ${textSecondary}`}>{totalExpense > avgMonthly ? t('above') : t('below')} {t('average')}</p>
             </div>
           </div>
         </Card>

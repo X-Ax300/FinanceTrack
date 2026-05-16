@@ -3,6 +3,7 @@ import type { ComponentType } from 'react';
 import { Bell, CheckCircle, CreditCard, DollarSign, Sparkles, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { APP_VERSION, getUserScopedKey } from '../lib/version';
 import Modal from './ui/Modal';
@@ -14,6 +15,7 @@ const ONBOARDING_KEY = 'ft-onboarding-seen';
 export default function AppVersionStatus() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const { isGranted, notifyInfo } = useNotifications();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showUpdateNotice, setShowUpdateNotice] = useState(false);
@@ -40,7 +42,7 @@ export default function AppVersionStatus() {
       setShowUpdateNotice(true);
 
       if (isGranted) {
-        notifyInfo('FinanceTrack actualizado', `Nueva versión disponible: v${APP_VERSION}`);
+        notifyInfo(t('New version installed'), `${t('New version installed')}: v${APP_VERSION}`);
       }
     }
 
@@ -89,9 +91,9 @@ export default function AppVersionStatus() {
                 <Bell className="h-4 w-4 text-cyan-400" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Nueva versión instalada</p>
+                <p className="text-sm font-semibold">{t('New version installed')}</p>
                 <p className={`mt-1 text-xs ${textSecondary}`}>
-                  Pasaste de v{previousVersion} a v{APP_VERSION}. Ya tienes las mejoras más recientes.
+                  {t('You moved from')} v{previousVersion} {t('to')} v{APP_VERSION}. {t('You already have the latest improvements.')}
                 </p>
               </div>
               <button
@@ -106,30 +108,30 @@ export default function AppVersionStatus() {
         </div>
       )}
 
-      <Modal open={showOnboarding} onClose={closeOnboarding} title="Bienvenido a FinanceTrack" maxWidth="max-w-xl">
+      <Modal open={showOnboarding} onClose={closeOnboarding} title={t('Welcome to FinanceTrack')} maxWidth="max-w-xl">
         <div className="space-y-4 sm:space-y-5">
           <p className={`text-sm leading-6 ${textSecondary}`}>
-            Organiza tus finanzas desde un solo lugar. Este mini recorrido te muestra lo esencial para empezar.
+            {t('Organize your finances from one place. This mini tour shows you the essentials to get started.')}
           </p>
 
           <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-            <IntroItem icon={DollarSign} title="Ingresos y gastos" text="Registra entradas, salidas y métodos de pago para ver tu balance real." />
-            <IntroItem icon={CreditCard} title="Tarjetas" text="Controla límites, cargos y pagos de tus tarjetas de crédito." />
-            <IntroItem icon={CheckCircle} title="Metas" text="Crea objetivos de ahorro y revisa tu avance con claridad." />
-            <IntroItem icon={Users} title="Amigos" text="Invita personas de confianza para compartir una vista solo lectura." />
+            <IntroItem icon={DollarSign} title={t('Income and expenses')} text={t('Track income, spending, and payment methods to see your real balance.')} />
+            <IntroItem icon={CreditCard} title={t('CardsIntro')} text={t('Manage limits, charges, and payments for your credit cards.')} />
+            <IntroItem icon={CheckCircle} title={t('GoalsIntro')} text={t('Create saving goals and review your progress clearly.')} />
+            <IntroItem icon={Users} title={t('FriendsIntro')} text={t('Invite trusted people to share a read-only view.')} />
           </div>
 
           <div className={`rounded-xl border p-3 sm:p-4 ${theme === 'dark' ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-cyan-100 bg-cyan-50'}`}>
             <div className="flex items-start gap-2.5 sm:gap-3">
               <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyan-400 sm:h-5 sm:w-5" />
               <p className={`text-sm leading-6 ${textPrimary}`}>
-                Activa las notificaciones web para enterarte cuando haya cambios importantes o cuando publiques una nueva versión.
+                {t('Enable web notifications to hear about important changes or new releases.')}
               </p>
             </div>
           </div>
 
           <Button className="w-full" onClick={closeOnboarding}>
-            Empezar
+            {t('Start')}
           </Button>
         </div>
       </Modal>

@@ -4,7 +4,6 @@ import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCre
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Language, useLanguage } from '../contexts/LanguageContext';
-import { auth } from '../lib/firebase';
 import { CURRENCIES, getStoredCurrency } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';

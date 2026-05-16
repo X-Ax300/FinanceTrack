@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, CreditCard, DollarSign, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
 import { combineExpensesWithCardCharges, formatCurrency, MONTHS } from '../lib/utils';
 import Card from '../components/ui/Card';
@@ -18,6 +19,7 @@ interface CalEvent {
 export default function CalendarPage() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
@@ -57,16 +59,16 @@ export default function CalendarPage() {
       const d = new Date(s.date);
       const day = d.getDate();
       if (!eventsByDay[day]) eventsByDay[day] = [];
-      eventsByDay[day].push({ day, type: 'income', label: `Income: ${s.type}`, amount: s.amount, color: '#22c55e' });
+      eventsByDay[day].push({ day, type: 'income', label: `${t('Income')}: ${t(s.type)}`, amount: s.amount, color: '#22c55e' });
     }
   });
 
   cards.forEach((c) => {
     if (!eventsByDay[c.cutDate]) eventsByDay[c.cutDate] = [];
-    eventsByDay[c.cutDate].push({ day: c.cutDate, type: 'card-cut', label: `${c.bankName} cut`, color: '#f59e0b' });
+    eventsByDay[c.cutDate].push({ day: c.cutDate, type: 'card-cut', label: `${c.bankName} ${t('cut')}`, color: '#f59e0b' });
 
     if (!eventsByDay[c.payDate]) eventsByDay[c.payDate] = [];
-    eventsByDay[c.payDate].push({ day: c.payDate, type: 'card-pay', label: `${c.bankName} payment`, color: '#06b6d4' });
+    eventsByDay[c.payDate].push({ day: c.payDate, type: 'card-pay', label: `${c.bankName} ${t('payment')}`, color: '#06b6d4' });
   });
 
   const today = new Date();
@@ -95,8 +97,8 @@ export default function CalendarPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className={`text-2xl font-bold ${textPrimary}`}>Financial Calendar</h1>
-        <p className={`text-sm mt-1 ${textSecondary}`}>Track payments, income and expenses</p>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Financial Calendar')}</h1>
+        <p className={`text-sm mt-1 ${textSecondary}`}>{t('Track payments, income and expenses')}</p>
       </div>
 
       {/* Upcoming alerts */}
@@ -107,8 +109,8 @@ export default function CalendarPage() {
               <div className="flex items-center gap-3">
                 <CreditCard className="w-4 h-4 text-amber-400 flex-shrink-0" />
                 <span className={`text-sm ${textPrimary}`}>
-                  <strong>{u.card.bankName}</strong> payment due in{' '}
-                  <strong className="text-amber-400">{u.days === 0 ? 'today' : `${u.days} day${u.days !== 1 ? 's' : ''}`}</strong>
+                  <strong>{u.card.bankName}</strong> {t('payment due in')}{' '}
+                  <strong className="text-amber-400">{u.days === 0 ? t('today') : `${u.days} ${u.days !== 1 ? t('days') : t('day')}`}</strong>
                 </span>
               </div>
             </Card>
@@ -122,14 +124,14 @@ export default function CalendarPage() {
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <h2 className={`text-lg font-semibold ${textPrimary}`}>
-              {MONTHS[month]} {year}
+              {t(MONTHS[month])} {year}
             </h2>
             <div className="flex gap-2">
               <button onClick={prevMonth} className={`p-2 rounded-xl transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-600'}`}>
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <button onClick={() => setCurrentDate(new Date())} className={`px-3 py-1 rounded-xl text-xs font-medium transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400' : 'hover:bg-gray-100 text-gray-600'}`}>
-                Today
+                {t('Today')}
               </button>
               <button onClick={nextMonth} className={`p-2 rounded-xl transition-colors ${theme === 'dark' ? 'hover:bg-gray-800 text-gray-400 hover:text-white' : 'hover:bg-gray-100 text-gray-600'}`}>
                 <ChevronRight className="w-4 h-4" />
@@ -140,7 +142,7 @@ export default function CalendarPage() {
           {/* Day headers */}
           <div className="grid grid-cols-7 mb-2">
             {dayNames.map((d) => (
-              <div key={d} className={`text-center text-xs font-medium py-2 ${textSecondary}`}>{d}</div>
+              <div key={d} className={`text-center text-xs font-medium py-2 ${textSecondary}`}>{t(d)}</div>
             ))}
           </div>
 
@@ -149,7 +151,6 @@ export default function CalendarPage() {
             {Array.from({ length: firstDay }).map((_, i) => <div key={`empty-${i}`} />)}
             {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
               const events = eventsByDay[day] || [];
-              const hasEvents = events.length > 0;
               return (
                 <div
                   key={day}
@@ -174,7 +175,7 @@ export default function CalendarPage() {
                       </div>
                     ))}
                     {events.length > 2 && (
-                      <div className={`text-xs ${textSecondary}`}>+{events.length - 2} more</div>
+                      <div className={`text-xs ${textSecondary}`}>+{events.length - 2} {t('more')}</div>
                     )}
                   </div>
                 </div>
@@ -186,7 +187,7 @@ export default function CalendarPage() {
         {/* Legend & upcoming */}
         <div className="space-y-4">
           <Card className="p-5">
-            <h3 className={`text-sm font-semibold mb-3 ${textPrimary}`}>Legend</h3>
+            <h3 className={`text-sm font-semibold mb-3 ${textPrimary}`}>{t('Legend')}</h3>
             <div className="space-y-2">
               {[
                 { color: '#f43f5e', label: 'Expense', icon: ShoppingBag },
@@ -196,30 +197,30 @@ export default function CalendarPage() {
               ].map((item) => (
                 <div key={item.label} className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: item.color }} />
-                  <span className={`text-xs ${textSecondary}`}>{item.label}</span>
+                  <span className={`text-xs ${textSecondary}`}>{t(item.label)}</span>
                 </div>
               ))}
             </div>
           </Card>
 
           <Card className="p-5">
-            <h3 className={`text-sm font-semibold mb-3 ${textPrimary}`}>This Month Summary</h3>
+            <h3 className={`text-sm font-semibold mb-3 ${textPrimary}`}>{t('This Month Summary')}</h3>
             <div className="space-y-3">
               <div>
-                <p className={`text-xs ${textSecondary}`}>Expenses</p>
+                <p className={`text-xs ${textSecondary}`}>{t('Expenses')}</p>
                 <p className="text-base font-bold text-rose-400">
                   {formatCurrency(allExpenses.filter((e) => { const d = new Date(e.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((a, e) => a + e.amount, 0))}
                 </p>
               </div>
               <div>
-                <p className={`text-xs ${textSecondary}`}>Income</p>
+                <p className={`text-xs ${textSecondary}`}>{t('Income')}</p>
                 <p className="text-base font-bold text-emerald-400">
                   {formatCurrency(salaries.filter((s) => s.month === month + 1 && s.year === year).reduce((a, s) => a + s.amount, 0))}
                 </p>
               </div>
               <div>
-                <p className={`text-xs ${textSecondary}`}>Card Payments</p>
-                <p className={`text-base font-bold ${textPrimary}`}>{cards.length} cards</p>
+                <p className={`text-xs ${textSecondary}`}>{t('Card Payments')}</p>
+                <p className={`text-base font-bold ${textPrimary}`}>{cards.length} {t('cards')}</p>
               </div>
             </div>
           </Card>

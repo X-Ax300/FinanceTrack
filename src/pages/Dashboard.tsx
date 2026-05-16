@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingUp, TrendingDown, Wallet, CreditCard,
-  ArrowUpRight, ArrowDownRight, DollarSign, Target,
+  ArrowUpRight, ArrowDownRight, Target,
   AlertCircle, CheckCircle2,
 } from 'lucide-react';
 import {
@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { getExpenses, getSalaries, getCards, getCardCharges, getGoals } from '../lib/firestore';
 import {
   combineExpensesWithCardCharges,
@@ -26,6 +27,7 @@ import type { CardCharge, Expense, Salary, CreditCard as CreditCardType, SavingG
 export default function Dashboard() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
@@ -131,13 +133,13 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div>
         <h1 className={`text-2xl font-bold ${textPrimary}`}>
-          Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},{' '}
+          {new Date().getHours() < 12 ? t('Good morning') : new Date().getHours() < 17 ? t('Good afternoon') : t('Good evening')},{' '}
           <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-            {currentUser?.displayName?.split(' ')[0] || 'there'}
+            {currentUser?.displayName?.split(' ')[0] || t('there')}
           </span>
         </h1>
         <p className={`text-sm mt-1 ${textSecondary}`}>
-          {MONTHS[curMonth - 1]} {curYear} — Here's your financial summary
+          {t(MONTHS[curMonth - 1])} {curYear} - {t("Here's your financial summary")}
         </p>
       </div>
 
@@ -145,7 +147,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           theme={theme}
-          label="Monthly Income"
+          label={t('Monthly Income')}
           value={formatCurrency(monthIncome)}
           change={incomeChange}
           icon={<TrendingUp className="w-5 h-5" />}
@@ -154,7 +156,7 @@ export default function Dashboard() {
         />
         <StatCard
           theme={theme}
-          label="Monthly Expenses"
+          label={t('Monthly Expenses')}
           value={formatCurrency(totalMonthExpense)}
           change={expenseChange}
           invertChange
@@ -164,7 +166,7 @@ export default function Dashboard() {
         />
         <StatCard
           theme={theme}
-          label="Balance"
+          label={t('Balance')}
           value={formatCurrency(balance)}
           icon={<Wallet className="w-5 h-5" />}
           gradient={balance >= 0 ? 'from-emerald-500 to-green-600' : 'from-red-500 to-rose-600'}
@@ -172,9 +174,9 @@ export default function Dashboard() {
         />
         <StatCard
           theme={theme}
-          label="Active Goals"
-          value={`${goals.length} goals`}
-          subValue={`${goals.filter(g => g.currentAmount >= g.targetAmount).length} completed`}
+          label={t('Active Goals')}
+          value={`${goals.length} ${t('goals')}`}
+          subValue={`${goals.filter(g => g.currentAmount >= g.targetAmount).length} ${t('completed')}`}
           icon={<Target className="w-5 h-5" />}
           gradient="from-amber-500 to-orange-600"
           glowColor="shadow-amber-500/20"
@@ -185,7 +187,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Trend chart */}
         <Card className="xl:col-span-2 p-6">
-          <h3 className={`text-base font-semibold mb-6 ${textPrimary}`}>Income vs Expenses Trend</h3>
+          <h3 className={`text-base font-semibold mb-6 ${textPrimary}`}>{t('Income vs Expenses Trend')}</h3>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={trendData} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
               <defs>
@@ -209,7 +211,7 @@ export default function Dashboard() {
                   color: theme === 'dark' ? '#fff' : '#111',
                   fontSize: 12,
                 }}
-                formatter={(v: number) => formatCurrency(v)}
+                formatter={(v) => formatCurrency(Number(v || 0))}
               />
               <Area type="monotone" dataKey="income" stroke="#06b6d4" strokeWidth={2} fill="url(#incGrad)" name="Income" />
               <Area type="monotone" dataKey="expenses" stroke="#f43f5e" strokeWidth={2} fill="url(#expGrad)" name="Expenses" />
@@ -218,18 +220,18 @@ export default function Dashboard() {
           <div className="flex gap-6 mt-2">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-cyan-400" />
-              <span className={`text-xs ${textSecondary}`}>Income</span>
+              <span className={`text-xs ${textSecondary}`}>{t('Income')}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-rose-400" />
-              <span className={`text-xs ${textSecondary}`}>Expenses</span>
+              <span className={`text-xs ${textSecondary}`}>{t('Expenses')}</span>
             </div>
           </div>
         </Card>
 
         {/* Pie chart */}
         <Card className="p-6">
-          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>Spending by Category</h3>
+          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>{t('Spending by Category')}</h3>
           {pieData.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={160}>
@@ -246,7 +248,7 @@ export default function Dashboard() {
                       borderRadius: 12,
                       fontSize: 12,
                     }}
-                    formatter={(v: number) => formatCurrency(v)}
+                    formatter={(v) => formatCurrency(Number(v || 0))}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -265,7 +267,7 @@ export default function Dashboard() {
           ) : (
             <div className={`flex flex-col items-center justify-center h-40 ${textSecondary} text-sm text-center`}>
               <AlertCircle className="w-8 h-8 mb-2 opacity-40" />
-              No expenses this month
+              {t('No expenses this month')}
             </div>
           )}
         </Card>
@@ -276,8 +278,8 @@ export default function Dashboard() {
         {/* Recent expenses */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className={`text-base font-semibold ${textPrimary}`}>Recent Expenses</h3>
-            <span className={`text-xs ${textSecondary}`}>{monthExpenses.length} this month</span>
+            <h3 className={`text-base font-semibold ${textPrimary}`}>{t('Recent Expenses')}</h3>
+            <span className={`text-xs ${textSecondary}`}>{monthExpenses.length} {t('this month')}</span>
           </div>
           <div className="space-y-3">
             {monthExpenses.slice(0, 5).map((e) => (
@@ -293,7 +295,7 @@ export default function Dashboard() {
               </div>
             ))}
             {monthExpenses.length === 0 && (
-              <p className={`text-sm text-center py-4 ${textSecondary}`}>No expenses recorded this month</p>
+              <p className={`text-sm text-center py-4 ${textSecondary}`}>{t('No expenses recorded this month')}</p>
             )}
           </div>
         </Card>
@@ -301,8 +303,8 @@ export default function Dashboard() {
         {/* Cards overview */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className={`text-base font-semibold ${textPrimary}`}>Credit Cards</h3>
-            <span className={`text-xs ${textSecondary}`}>{cards.length} card{cards.length !== 1 ? 's' : ''}</span>
+            <h3 className={`text-base font-semibold ${textPrimary}`}>{t('Credit Cards')}</h3>
+            <span className={`text-xs ${textSecondary}`}>{cards.length} {cards.length !== 1 ? t('cards') : t('card')}</span>
           </div>
           <div className="space-y-3">
             {cards.slice(0, 4).map((card) => (
@@ -317,7 +319,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`text-xs ${textSecondary}`}>Limit</p>
+                  <p className={`text-xs ${textSecondary}`}>{t('Limit')}</p>
                   <p className={`text-sm font-semibold ${textPrimary}`}>{formatCurrency(card.limit)}</p>
                 </div>
               </div>
@@ -332,7 +334,7 @@ export default function Dashboard() {
       {/* Goals progress */}
       {goals.length > 0 && (
         <Card className="p-6">
-          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>Saving Goals</h3>
+            <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>{t('Saving Goals')}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {goals.slice(0, 6).map((goal) => {
               const pct = Math.min(100, (goal.currentAmount / goal.targetAmount) * 100);

@@ -49,7 +49,7 @@ export default function Layout({ children }: LayoutProps) {
     try {
       const granted = await requestPermission();
       if (granted) {
-        notifySuccess('Notificaciones activadas', 'FinanceTrack ya puede enviarte alertas web.');
+        notifySuccess(t('Notifications enabled'), t('FinanceTrack can now send you web alerts.'));
       }
     } finally {
       setRequestingNotifications(false);
@@ -181,7 +181,7 @@ export default function Layout({ children }: LayoutProps) {
           <button
             onClick={handleNotificationPermission}
             className={`relative p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
-            title={isGranted ? 'Notificaciones habilitadas' : 'Habilitar notificaciones'}
+            title={isGranted ? t('Notifications enabled title') : t('Enable notifications')}
           >
             <Bell className="w-5 h-5" />
             {!isGranted && permission === 'default' && (
@@ -196,7 +196,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="flex items-start gap-2.5 sm:items-center sm:gap-3">
                 <Bell className="w-4 h-4 text-cyan-400 flex-shrink-0" />
                 <p className={`text-xs leading-5 sm:text-sm ${theme === 'dark' ? 'text-cyan-50' : 'text-cyan-950'}`}>
-                  Activa las notificaciones web para recibir alertas de FinanceTrack.
+                  {t('Activate web notifications to receive FinanceTrack alerts.')}
                 </p>
               </div>
               <button
@@ -205,7 +205,7 @@ export default function Layout({ children }: LayoutProps) {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-400 disabled:opacity-60 sm:w-auto sm:py-1.5"
               >
                 <Bell className="w-3.5 h-3.5" />
-                {requestingNotifications ? 'Solicitando...' : 'Permitir notificaciones'}
+                {requestingNotifications ? t('Requesting...') : t('Allow notifications')}
               </button>
             </div>
           </div>

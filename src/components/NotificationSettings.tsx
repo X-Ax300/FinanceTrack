@@ -2,11 +2,13 @@ import { Bell, BellOff, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import Card from './ui/Card';
 import Button from './ui/Button';
 
 export function NotificationSettings() {
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const { canNotify, isGranted, requestPermission, notifySuccess } = useNotifications();
   const [requesting, setRequesting] = useState(false);
 
@@ -20,9 +22,9 @@ export function NotificationSettings() {
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className={`text-sm font-medium ${textPrimary}`}>Notificaciones no disponibles</p>
+            <p className={`text-sm font-medium ${textPrimary}`}>{t('Notifications unavailable')}</p>
             <p className={`text-xs mt-1 ${textSecondary}`}>
-              Tu navegador no soporta notificaciones web. Usa Chrome, Firefox, Safari 16+, o Edge.
+              {t('Your browser does not support web notifications. Use Chrome, Firefox, Safari 16+, or Edge.')}
             </p>
           </div>
         </div>
@@ -35,7 +37,7 @@ export function NotificationSettings() {
     try {
       const granted = await requestPermission();
       if (granted) {
-        notifySuccess('¡Notificaciones habilitadas!', 'Recibirás notificaciones sobre tu cuenta.');
+        notifySuccess(t('Notifications enabled'), t('You will receive notifications about your account.'));
       }
     } catch (error) {
       console.error('Error requesting notification permission:', error);
@@ -57,11 +59,11 @@ export function NotificationSettings() {
               )}
             </div>
             <div>
-              <p className={`text-sm font-medium ${textPrimary}`}>Notificaciones Web</p>
+              <p className={`text-sm font-medium ${textPrimary}`}>{t('Web Notifications')}</p>
               <p className={`text-xs mt-1 ${textSecondary}`}>
                 {isGranted
-                  ? '✅ Notificaciones habilitadas. Recibirás alertas sobre movimientos en tu cuenta.'
-                  : 'Activa las notificaciones para recibir alertas sobre transacciones importantes.'}
+                  ? t('Notifications are enabled. You will receive alerts about account activity.')
+                  : t('Enable notifications to receive alerts about important transactions.')}
               </p>
             </div>
           </div>
@@ -75,19 +77,19 @@ export function NotificationSettings() {
             size="sm"
           >
             <Bell className="w-4 h-4" />
-            {requesting ? 'Solicitando permisos...' : 'Habilitar Notificaciones'}
+            {requesting ? t('Requesting permissions...') : t('Enable Notifications')}
           </Button>
         )}
 
         {isGranted && (
           <div className="mt-4 p-3 bg-cyan-500/10 border border-cyan-500/20 rounded-lg">
             <p className={`text-xs ${textSecondary}`}>
-              📢 Recibirás notificaciones cuando:
+              {t('You will receive notifications when:')}
             </p>
             <ul className={`text-xs mt-2 space-y-1 ${textSecondary}`}>
-              <li>• Se agregue un nuevo gasto o ingreso</li>
-              <li>• Sincronicen datos en segundo plano</li>
-              <li>• Haya cambios en tus tarjetas de crédito</li>
+              <li>• {t('A new expense or income is added')}</li>
+              <li>• {t('Data syncs in the background')}</li>
+              <li>• {t('There are changes to your credit cards')}</li>
             </ul>
           </div>
         )}
@@ -98,9 +100,9 @@ export function NotificationSettings() {
           <div className="flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className={`text-sm font-medium ${textPrimary}`}>¿Por qué notificaciones?</p>
+              <p className={`text-sm font-medium ${textPrimary}`}>{t('Why notifications?')}</p>
               <p className={`text-xs mt-1 ${textSecondary}`}>
-                Las notificaciones te ayudan a estar atento a tus finanzas. Recibirás alertas en tiempo real sobre cambios importantes en tu cuenta.
+                {t('Notifications help you stay aware of your finances. You will receive real-time alerts about important account changes.')}
               </p>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, CreditCard, AlertTriangle, DollarSign, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import {
   getCards,
   addCard,
@@ -45,6 +46,7 @@ const CHARGE_CATEGORIES: ExpenseCategory[] = ['food', 'transport', 'streaming', 
 export default function Cards() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [payments, setPayments] = useState<CardPayment[]>([]);
   const [charges, setCharges] = useState<CardCharge[]>([]);
@@ -117,7 +119,7 @@ export default function Cards() {
       setCardModal(false);
     } catch (err) {
       console.error('Failed to save card:', err);
-      setError('Could not save the credit card. Please check your connection and try again.');
+      setError(t('Could not save the credit card. Please check your connection and try again.'));
     } finally {
       setSaving(false);
     }
@@ -141,7 +143,7 @@ export default function Cards() {
       setPayModal(false);
     } catch (err) {
       console.error('Failed to save card payment:', err);
-      setError('Could not save the payment. Please check your connection and try again.');
+      setError(t('Could not save the payment. Please check your connection and try again.'));
     } finally {
       setSaving(false);
     }
@@ -165,7 +167,7 @@ export default function Cards() {
       setChargeModal(false);
     } catch (err) {
       console.error('Failed to save card charge:', err);
-      setError('Could not save the card usage. Please check your connection and try again.');
+      setError(t('Could not save the card usage. Please check your connection and try again.'));
     } finally {
       setSaving(false);
     }
@@ -180,7 +182,7 @@ export default function Cards() {
       await load(true);
     } catch (err) {
       console.error('Failed to delete card:', err);
-      setError('Could not delete the card. Please try again.');
+      setError(t('Could not delete the card. Please try again.'));
     }
   }
 
@@ -197,11 +199,11 @@ export default function Cards() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>Credit Cards</h1>
-          <p className={`text-sm mt-1 ${textSecondary}`}>{cards.length} card{cards.length !== 1 ? 's' : ''} registered</p>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Credit Cards')}</h1>
+          <p className={`text-sm mt-1 ${textSecondary}`}>{cards.length} {cards.length !== 1 ? t('cards') : t('card')} {t('registered')}</p>
         </div>
         <Button onClick={() => { setEditId(null); setCardForm(emptyCardForm); setCardModal(true); }} size="sm">
-          <Plus className="w-4 h-4" /> Add Card
+          <Plus className="w-4 h-4" /> {t('Add Card')}
         </Button>
       </div>
 
@@ -217,9 +219,9 @@ export default function Cards() {
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-amber-300">Payment Due Soon</p>
+              <p className="text-sm font-medium text-amber-300">{t('Payment Due Soon')}</p>
               <p className={`text-xs ${textSecondary}`}>
-                {upcomingPayments.map((c) => `${c.bankName} (day ${c.payDate})`).join(', ')} — make sure to pay on time
+                {upcomingPayments.map((c) => `${c.bankName} (${t('day')} ${c.payDate})`).join(', ')} - {t('make sure to pay on time')}
               </p>
             </div>
           </div>
@@ -245,7 +247,7 @@ export default function Cards() {
                 <div className="flex items-start justify-between mb-8">
                   <div>
                     <p className="text-sm font-medium opacity-80">{card.bankName}</p>
-                    <p className="text-xs opacity-60 mt-0.5">Credit Card</p>
+                    <p className="text-xs opacity-60 mt-0.5">{t('Credit Card')}</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => { setEditId(card.id!); setCardForm({ bankName: card.bankName, lastFour: card.lastFour, limit: String(card.limit), cutDate: String(card.cutDate), payDate: String(card.payDate), color: card.color }); setCardModal(true); }} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-all">
@@ -259,8 +261,8 @@ export default function Cards() {
                 <div>
                   <p className="text-lg font-bold tracking-widest">•••• •••• •••• {card.lastFour || '0000'}</p>
                   <div className="flex justify-between mt-2 text-xs opacity-70">
-                    <span>Cut: Day {card.cutDate}</span>
-                    <span>Pay: Day {card.payDate}</span>
+                    <span>{t('Cut')}: {t('Day')} {card.cutDate}</span>
+                    <span>{t('Pay')}: {t('Day')} {card.payDate}</span>
                   </div>
                 </div>
               </div>
@@ -268,30 +270,30 @@ export default function Cards() {
               {/* Card info */}
               <div className="p-4 space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className={textSecondary}>Limit</span>
+                  <span className={textSecondary}>{t('Limit')}</span>
                   <span className={`font-semibold ${textPrimary}`}>{formatCurrency(card.limit)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className={textSecondary}>Used this month</span>
+                  <span className={textSecondary}>{t('Used this month')}</span>
                   <span className="font-semibold text-rose-400">{formatCurrency(used)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className={textSecondary}>Paid this month</span>
+                  <span className={textSecondary}>{t('Paid this month')}</span>
                   <span className="font-semibold text-emerald-400">{formatCurrency(paid)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className={textSecondary}>Pending balance</span>
+                  <span className={textSecondary}>{t('Pending balance')}</span>
                   <span className={`font-semibold ${balance > 0 ? 'text-amber-400' : textPrimary}`}>{formatCurrency(balance)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className={textSecondary}>Days until payment</span>
-                  <span className={`font-semibold ${daysUntilPay <= 3 ? 'text-amber-400' : textPrimary}`}>{daysUntilPay} days</span>
+                  <span className={textSecondary}>{t('Days until payment')}</span>
+                  <span className={`font-semibold ${daysUntilPay <= 3 ? 'text-amber-400' : textPrimary}`}>{daysUntilPay} {t('days')}</span>
                 </div>
 
                 {/* Usage history */}
                 {cardCharges.length > 0 && (
                   <div className={`mt-3 pt-3 border-t ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
-                    <p className={`text-xs font-medium ${textSecondary} mb-2`}>Recent Usage</p>
+                    <p className={`text-xs font-medium ${textSecondary} mb-2`}>{t('Recent Usage')}</p>
                     {cardCharges.slice(0, 3).map((charge) => (
                       <div key={charge.id} className="flex justify-between items-center py-1 gap-3">
                         <div className="min-w-0">
@@ -312,10 +314,10 @@ export default function Cards() {
                 {/* Payment history */}
                 {cardPayments.length > 0 && (
                   <div className={`mt-3 pt-3 border-t ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
-                    <p className={`text-xs font-medium ${textSecondary} mb-2`}>Recent Payments</p>
+                    <p className={`text-xs font-medium ${textSecondary} mb-2`}>{t('Recent Payments')}</p>
                     {cardPayments.slice(0, 3).map((p) => (
                       <div key={p.id} className="flex justify-between items-center py-1">
-                        <span className={`text-xs ${textSecondary}`}>{MONTHS[p.month - 1]} {p.year}</span>
+                        <span className={`text-xs ${textSecondary}`}>{t(MONTHS[p.month - 1])} {p.year}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-emerald-400">{formatCurrency(p.amount)}</span>
                           <button onClick={() => { if (currentUser) { deleteCardPayment(p.id!, currentUser.uid); load(true); } }} className="text-gray-600 hover:text-red-400 transition-colors">
@@ -333,14 +335,14 @@ export default function Cards() {
                     variant="secondary"
                     onClick={() => { setSelectedCard(card); setChargeForm(emptyChargeForm); setChargeModal(true); }}
                   >
-                    <ShoppingBag className="w-3.5 h-3.5" /> Use
+                    <ShoppingBag className="w-3.5 h-3.5" /> {t('Use')}
                   </Button>
                   <Button
                     size="sm"
                     variant="secondary"
                     onClick={() => { setSelectedCard(card); setPayForm(emptyPayForm); setPayModal(true); }}
                   >
-                    <DollarSign className="w-3.5 h-3.5" /> Pay
+                    <DollarSign className="w-3.5 h-3.5" /> {t('Pay')}
                   </Button>
                 </div>
               </div>
@@ -355,26 +357,26 @@ export default function Cards() {
             onClick={() => { setEditId(null); setCardForm(emptyCardForm); setCardModal(true); }}
           >
             <CreditCard className="w-10 h-10 mb-3" />
-            <p className="text-sm font-medium">No cards registered</p>
-            <p className="text-xs mt-1">Click to add your first credit card</p>
+            <p className="text-sm font-medium">{t('No cards registered')}</p>
+            <p className="text-xs mt-1">{t('Click to add your first credit card')}</p>
           </div>
         )}
       </div>
 
       {/* Card modal */}
-      <Modal open={cardModal} onClose={() => setCardModal(false)} title={editId ? 'Edit Card' : 'Add Credit Card'}>
+      <Modal open={cardModal} onClose={() => setCardModal(false)} title={editId ? t('Edit Card') : t('Add Credit Card')}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Bank Name" value={cardForm.bankName} onChange={(e) => setCardForm({ ...cardForm, bankName: e.target.value })} placeholder="Visa, Chase..." required />
-            <Input label="Last 4 digits" value={cardForm.lastFour} onChange={(e) => setCardForm({ ...cardForm, lastFour: e.target.value })} placeholder="1234" maxLength={4} />
+            <Input label={t('Bank Name')} value={cardForm.bankName} onChange={(e) => setCardForm({ ...cardForm, bankName: e.target.value })} placeholder="Visa, Chase..." required />
+            <Input label={t('Last 4 digits')} value={cardForm.lastFour} onChange={(e) => setCardForm({ ...cardForm, lastFour: e.target.value })} placeholder="1234" maxLength={4} />
           </div>
-          <Input label="Credit Limit" type="number" min="0" value={cardForm.limit} onChange={(e) => setCardForm({ ...cardForm, limit: e.target.value })} placeholder="5000" required />
+          <Input label={t('Credit Limit')} type="number" min="0" value={cardForm.limit} onChange={(e) => setCardForm({ ...cardForm, limit: e.target.value })} placeholder="5000" required />
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Cut Date (day)" type="number" min="1" max="31" value={cardForm.cutDate} onChange={(e) => setCardForm({ ...cardForm, cutDate: e.target.value })} />
-            <Input label="Pay Date (day)" type="number" min="1" max="31" value={cardForm.payDate} onChange={(e) => setCardForm({ ...cardForm, payDate: e.target.value })} />
+            <Input label={t('Cut Date (day)')} type="number" min="1" max="31" value={cardForm.cutDate} onChange={(e) => setCardForm({ ...cardForm, cutDate: e.target.value })} />
+            <Input label={t('Pay Date (day)')} type="number" min="1" max="31" value={cardForm.payDate} onChange={(e) => setCardForm({ ...cardForm, payDate: e.target.value })} />
           </div>
           <div>
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'} mb-2 block`}>Card Color</label>
+            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'} mb-2 block`}>{t('Card Color')}</label>
             <div className="flex gap-2">
               {CARD_COLORS.map((c) => (
                 <button key={c} onClick={() => setCardForm({ ...cardForm, color: c })}
@@ -385,25 +387,25 @@ export default function Cards() {
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <Button variant="ghost" className="flex-1" onClick={() => setCardModal(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleSaveCard} loading={saving}>{editId ? 'Save Changes' : 'Add Card'}</Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setCardModal(false)}>{t('Cancel')}</Button>
+            <Button className="flex-1" onClick={handleSaveCard} loading={saving}>{editId ? t('Save Changes') : t('Add Card')}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Usage modal */}
-      <Modal open={chargeModal} onClose={() => setChargeModal(false)} title={`Card Usage — ${selectedCard?.bankName}`}>
+      <Modal open={chargeModal} onClose={() => setChargeModal(false)} title={`${t('Card Usage')} - ${selectedCard?.bankName}`}>
         <div className="space-y-4">
           <Input
-            label="Description"
+            label={t('Description')}
             value={chargeForm.description}
             onChange={(e) => setChargeForm({ ...chargeForm, description: e.target.value })}
-            placeholder="Groceries, fuel, subscription..."
+            placeholder={t('Groceries, fuel, subscription...')}
             required
           />
           <div className="grid grid-cols-2 gap-3">
             <Input
-              label="Amount"
+              label={t('Amount')}
               type="number"
               min="0"
               step="0.01"
@@ -413,58 +415,58 @@ export default function Cards() {
               required
             />
             <Input
-              label="Date"
+              label={t('Date')}
               type="date"
               value={chargeForm.date}
               onChange={(e) => setChargeForm({ ...chargeForm, date: e.target.value })}
               required
             />
           </div>
-          <Select label="Category" value={chargeForm.category} onChange={(e) => setChargeForm({ ...chargeForm, category: e.target.value as ExpenseCategory })}>
+          <Select label={t('Category')} value={chargeForm.category} onChange={(e) => setChargeForm({ ...chargeForm, category: e.target.value as ExpenseCategory })}>
             {CHARGE_CATEGORIES.map((category) => (
-              <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
+              <option key={category} value={category}>{t(CATEGORY_LABELS[category])}</option>
             ))}
           </Select>
           <Input
-            label="Note (optional)"
+            label={t('Note (optional)')}
             value={chargeForm.note}
             onChange={(e) => setChargeForm({ ...chargeForm, note: e.target.value })}
-            placeholder="Additional details..."
+            placeholder={t('Additional details...')}
           />
           <div className="flex gap-3 pt-2">
-            <Button variant="ghost" className="flex-1" onClick={() => setChargeModal(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleSaveCharge} loading={saving}>Register Usage</Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setChargeModal(false)}>{t('Cancel')}</Button>
+            <Button className="flex-1" onClick={handleSaveCharge} loading={saving}>{t('Register Usage')}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Payment modal */}
-      <Modal open={payModal} onClose={() => setPayModal(false)} title={`Payment — ${selectedCard?.bankName}`}>
+      <Modal open={payModal} onClose={() => setPayModal(false)} title={`${t('Payment')} - ${selectedCard?.bankName}`}>
         <div className="space-y-4">
-          <Input label="Amount" type="number" min="0" step="0.01" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} placeholder="0.00" required />
+          <Input label={t('Amount')} type="number" min="0" step="0.01" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} placeholder="0.00" required />
           <div className="grid grid-cols-2 gap-3">
-            <Select label="Month" value={payForm.month} onChange={(e) => setPayForm({ ...payForm, month: e.target.value })}>
-              {MONTHS.map((m, i) => <option key={i} value={String(i + 1)}>{m}</option>)}
+            <Select label={t('Month')} value={payForm.month} onChange={(e) => setPayForm({ ...payForm, month: e.target.value })}>
+              {MONTHS.map((m, i) => <option key={i} value={String(i + 1)}>{t(m)}</option>)}
             </Select>
-            <Select label="Year" value={payForm.year} onChange={(e) => setPayForm({ ...payForm, year: e.target.value })}>
+            <Select label={t('Year')} value={payForm.year} onChange={(e) => setPayForm({ ...payForm, year: e.target.value })}>
               {[2023, 2024, 2025, 2026].map((y) => <option key={y} value={String(y)}>{y}</option>)}
             </Select>
           </div>
-          <Input label="Date" type="date" value={payForm.date} onChange={(e) => setPayForm({ ...payForm, date: e.target.value })} />
-          <Input label="Note (optional)" value={payForm.note} onChange={(e) => setPayForm({ ...payForm, note: e.target.value })} placeholder="..." />
+          <Input label={t('Date')} type="date" value={payForm.date} onChange={(e) => setPayForm({ ...payForm, date: e.target.value })} />
+          <Input label={t('Note (optional)')} value={payForm.note} onChange={(e) => setPayForm({ ...payForm, note: e.target.value })} placeholder="..." />
           <div className="flex gap-3 pt-2">
-            <Button variant="ghost" className="flex-1" onClick={() => setPayModal(false)}>Cancel</Button>
-            <Button className="flex-1" onClick={handleSavePayment} loading={saving}>Register Payment</Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setPayModal(false)}>{t('Cancel')}</Button>
+            <Button className="flex-1" onClick={handleSavePayment} loading={saving}>{t('Register Payment')}</Button>
           </div>
         </div>
       </Modal>
 
       {/* Delete card */}
-      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete Card">
-        <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-6`}>This will permanently delete the card and all its payment records.</p>
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title={t('Delete Card')}>
+        <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-6`}>{t('This will permanently delete the card and all its payment records.')}</p>
         <div className="flex gap-3">
-          <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>Cancel</Button>
-          <Button variant="danger" className="flex-1" onClick={handleDeleteCard}>Delete</Button>
+          <Button variant="ghost" className="flex-1" onClick={() => setDeleteId(null)}>{t('Cancel')}</Button>
+          <Button variant="danger" className="flex-1" onClick={handleDeleteCard}>{t('Delete')}</Button>
         </div>
       </Modal>
     </div>

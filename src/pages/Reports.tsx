@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FileText, Download, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
 import { combineExpensesWithCardCharges, formatCurrency, MONTHS, CATEGORY_LABELS, getCurrentYear } from '../lib/utils';
 import Card from '../components/ui/Card';
@@ -11,6 +12,7 @@ import type { CardCharge, CreditCard, Expense, Salary } from '../types';
 export default function Reports() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
+  const { t } = useLanguage();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
@@ -90,8 +92,8 @@ export default function Reports() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className={`text-2xl font-bold ${textPrimary}`}>Reports</h1>
-          <p className={`text-sm mt-1 ${textSecondary}`}>Annual financial reports and exports</p>
+          <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Reports')}</h1>
+          <p className={`text-sm mt-1 ${textSecondary}`}>{t('Annual financial reports and exports')}</p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -117,7 +119,7 @@ export default function Reports() {
             <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center">
               <TrendingUp className="w-4.5 h-4.5 w-5 h-5 text-cyan-400" />
             </div>
-            <p className={`text-sm ${textSecondary}`}>Total Income {selectedYear}</p>
+            <p className={`text-sm ${textSecondary}`}>{t('Total Income')} {selectedYear}</p>
           </div>
           <p className="text-2xl font-bold text-cyan-400">{formatCurrency(yearIncome)}</p>
         </Card>
@@ -126,7 +128,7 @@ export default function Reports() {
             <div className="w-9 h-9 rounded-xl bg-rose-500/20 flex items-center justify-center">
               <TrendingDown className="w-5 h-5 text-rose-400" />
             </div>
-            <p className={`text-sm ${textSecondary}`}>Total Expenses {selectedYear}</p>
+            <p className={`text-sm ${textSecondary}`}>{t('Total Expenses')} {selectedYear}</p>
           </div>
           <p className="text-2xl font-bold text-rose-400">{formatCurrency(yearExpense)}</p>
         </Card>
@@ -135,7 +137,7 @@ export default function Reports() {
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center">
               <BarChart3 className="w-5 h-5 text-emerald-400" />
             </div>
-            <p className={`text-sm ${textSecondary}`}>Net Savings {selectedYear}</p>
+            <p className={`text-sm ${textSecondary}`}>{t('Net Savings')} {selectedYear}</p>
           </div>
           <p className={`text-2xl font-bold ${yearSavings >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(yearSavings)}</p>
         </Card>
@@ -145,14 +147,14 @@ export default function Reports() {
       <Card className="overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-800/40 flex items-center gap-2">
           <FileText className={`w-4 h-4 ${textSecondary}`} />
-          <h3 className={`text-base font-semibold ${textPrimary}`}>Monthly Breakdown — {selectedYear}</h3>
+          <h3 className={`text-base font-semibold ${textPrimary}`}>{t('Monthly Breakdown')} - {selectedYear}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className={`border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
                 {['Month', 'Income', 'Expenses', 'Savings', 'Savings Rate', 'Status'].map((h) => (
-                  <th key={h} className={`px-5 py-3 text-left text-xs font-medium ${textSecondary} uppercase tracking-wider`}>{h}</th>
+                  <th key={h} className={`px-5 py-3 text-left text-xs font-medium ${textSecondary} uppercase tracking-wider`}>{t(h)}</th>
                 ))}
               </tr>
             </thead>
@@ -161,7 +163,7 @@ export default function Reports() {
                 const hasData = row.income > 0 || row.expense > 0;
                 return (
                   <tr key={row.m} className={`transition-colors ${theme === 'dark' ? 'hover:bg-gray-800/30' : 'hover:bg-gray-50'} ${!hasData ? 'opacity-40' : ''}`}>
-                    <td className={`px-5 py-3 text-sm font-medium ${textPrimary}`}>{row.month}</td>
+                    <td className={`px-5 py-3 text-sm font-medium ${textPrimary}`}>{t(row.month)}</td>
                     <td className="px-5 py-3 text-sm text-cyan-400 font-medium">{formatCurrency(row.income)}</td>
                     <td className="px-5 py-3 text-sm text-rose-400 font-medium">{formatCurrency(row.expense)}</td>
                     <td className={`px-5 py-3 text-sm font-medium ${row.savings >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -181,9 +183,9 @@ export default function Reports() {
                       {hasData ? (
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium
                           ${row.savings >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                          {row.savings >= 0 ? 'Positive' : 'Deficit'}
+                          {row.savings >= 0 ? t('Positive') : t('Deficit')}
                         </span>
-                      ) : <span className={`text-xs ${textSecondary}`}>No data</span>}
+                      ) : <span className={`text-xs ${textSecondary}`}>{t('No data')}</span>}
                     </td>
                   </tr>
                 );
@@ -196,7 +198,7 @@ export default function Reports() {
       {/* Category breakdown */}
       {Object.keys(catTotals).length > 0 && (
         <Card className="p-6">
-          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>Annual Spending by Category</h3>
+          <h3 className={`text-base font-semibold mb-4 ${textPrimary}`}>{t('Annual Spending by Category')}</h3>
           <div className="space-y-3">
             {Object.entries(catTotals)
               .sort((a, b) => b[1] - a[1])
@@ -204,7 +206,7 @@ export default function Reports() {
                 const pct = yearExpense > 0 ? (amt / yearExpense) * 100 : 0;
                 return (
                   <div key={cat} className="flex items-center gap-3">
-                    <span className={`text-sm w-24 ${textSecondary}`}>{CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] || cat}</span>
+                    <span className={`text-sm w-24 ${textSecondary}`}>{t(CATEGORY_LABELS[cat as keyof typeof CATEGORY_LABELS] || cat)}</span>
                     <div className={`flex-1 h-2 rounded-full ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
                       <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 transition-all" style={{ width: `${pct}%` }} />
                     </div>
