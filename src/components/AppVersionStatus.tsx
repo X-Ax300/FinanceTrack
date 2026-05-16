@@ -67,7 +67,7 @@ export default function AppVersionStatus() {
   return (
     <>
       <div
-        className={`fixed bottom-3 right-3 z-40 rounded-lg border px-2.5 py-1 text-[11px] font-medium shadow-sm backdrop-blur
+        className={`fixed bottom-2 right-2 z-40 rounded-lg border px-2 py-1 text-[10px] font-medium shadow-sm backdrop-blur sm:bottom-3 sm:right-3 sm:px-2.5 sm:text-[11px]
           ${theme === 'dark'
             ? 'border-gray-800 bg-gray-950/80 text-gray-400'
             : 'border-gray-200 bg-white/85 text-gray-500'}`}
@@ -77,15 +77,15 @@ export default function AppVersionStatus() {
       </div>
 
       {showUpdateNotice && (
-        <div className="fixed bottom-12 right-3 z-40 w-[calc(100vw-1.5rem)] max-w-sm">
+        <div className="fixed bottom-10 left-2 right-2 z-40 sm:bottom-12 sm:left-auto sm:right-3 sm:w-[calc(100vw-1.5rem)] sm:max-w-sm">
           <div
             className={`rounded-xl border p-4 shadow-xl backdrop-blur
               ${theme === 'dark'
                 ? 'border-cyan-500/20 bg-gray-900/95 text-white'
                 : 'border-cyan-100 bg-white/95 text-gray-900'}`}
           >
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 rounded-lg bg-cyan-500/15 p-2">
+            <div className="flex items-start gap-2.5 sm:gap-3">
+              <div className="mt-0.5 rounded-lg bg-cyan-500/15 p-1.5 sm:p-2">
                 <Bell className="h-4 w-4 text-cyan-400" />
               </div>
               <div className="min-w-0 flex-1">
@@ -107,22 +107,22 @@ export default function AppVersionStatus() {
       )}
 
       <Modal open={showOnboarding} onClose={closeOnboarding} title="Bienvenido a FinanceTrack" maxWidth="max-w-xl">
-        <div className="space-y-5">
-          <p className={`text-sm ${textSecondary}`}>
+        <div className="space-y-4 sm:space-y-5">
+          <p className={`text-sm leading-6 ${textSecondary}`}>
             Organiza tus finanzas desde un solo lugar. Este mini recorrido te muestra lo esencial para empezar.
           </p>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
             <IntroItem icon={DollarSign} title="Ingresos y gastos" text="Registra entradas, salidas y métodos de pago para ver tu balance real." />
             <IntroItem icon={CreditCard} title="Tarjetas" text="Controla límites, cargos y pagos de tus tarjetas de crédito." />
             <IntroItem icon={CheckCircle} title="Metas" text="Crea objetivos de ahorro y revisa tu avance con claridad." />
             <IntroItem icon={Users} title="Amigos" text="Invita personas de confianza para compartir una vista solo lectura." />
           </div>
 
-          <div className={`rounded-xl border p-4 ${theme === 'dark' ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-cyan-100 bg-cyan-50'}`}>
-            <div className="flex items-start gap-3">
-              <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-cyan-400" />
-              <p className={`text-sm ${textPrimary}`}>
+          <div className={`rounded-xl border p-3 sm:p-4 ${theme === 'dark' ? 'border-cyan-500/20 bg-cyan-500/10' : 'border-cyan-100 bg-cyan-50'}`}>
+            <div className="flex items-start gap-2.5 sm:gap-3">
+              <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-cyan-400 sm:h-5 sm:w-5" />
+              <p className={`text-sm leading-6 ${textPrimary}`}>
                 Activa las notificaciones web para enterarte cuando haya cambios importantes o cuando publiques una nueva versión.
               </p>
             </div>
@@ -151,10 +151,14 @@ function IntroItem({
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
 
   return (
-    <div className={`rounded-xl border p-4 ${theme === 'dark' ? 'border-gray-800 bg-gray-800/50' : 'border-gray-100 bg-gray-50'}`}>
-      <Icon className="mb-3 h-5 w-5 text-cyan-400" />
-      <p className={`text-sm font-semibold ${textPrimary}`}>{title}</p>
-      <p className={`mt-1 text-xs leading-5 ${textSecondary}`}>{text}</p>
+    <div className={`rounded-xl border p-3 sm:p-4 ${theme === 'dark' ? 'border-gray-800 bg-gray-800/50' : 'border-gray-100 bg-gray-50'}`}>
+      <div className="flex items-start gap-3 sm:block">
+        <Icon className="mt-0.5 h-5 w-5 flex-shrink-0 text-cyan-400 sm:mb-3 sm:mt-0" />
+        <div className="min-w-0">
+          <p className={`text-sm font-semibold ${textPrimary}`}>{title}</p>
+          <p className={`mt-1 text-xs leading-5 ${textSecondary}`}>{text}</p>
+        </div>
+      </div>
     </div>
   );
 }

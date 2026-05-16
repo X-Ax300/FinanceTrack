@@ -191,18 +191,18 @@ export default function Layout({ children }: LayoutProps) {
         </header>
 
         {canNotify && !isGranted && permission === 'default' && (
-          <div className={`px-4 lg:px-6 py-3 border-b ${theme === 'dark' ? 'bg-cyan-500/10 border-cyan-500/20' : 'bg-cyan-50 border-cyan-100'}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
+          <div className={`px-3 py-2.5 border-b sm:px-4 lg:px-6 sm:py-3 ${theme === 'dark' ? 'bg-cyan-500/10 border-cyan-500/20' : 'bg-cyan-50 border-cyan-100'}`}>
+            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <div className="flex items-start gap-2.5 sm:items-center sm:gap-3">
                 <Bell className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                <p className={`text-sm ${theme === 'dark' ? 'text-cyan-50' : 'text-cyan-950'}`}>
+                <p className={`text-xs leading-5 sm:text-sm ${theme === 'dark' ? 'text-cyan-50' : 'text-cyan-950'}`}>
                   Activa las notificaciones web para recibir alertas de FinanceTrack.
                 </p>
               </div>
               <button
                 onClick={handleNotificationPermission}
                 disabled={requestingNotifications}
-                className="inline-flex items-center justify-center gap-2 rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-400 disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-cyan-500 px-3 py-2 text-xs font-medium text-white hover:bg-cyan-400 disabled:opacity-60 sm:w-auto sm:py-1.5"
               >
                 <Bell className="w-3.5 h-3.5" />
                 {requestingNotifications ? 'Solicitando...' : 'Permitir notificaciones'}
@@ -211,7 +211,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         )}
 
-        <main className="flex-1 p-4 lg:p-6 overflow-auto">
+        <main className="flex-1 overflow-auto p-4 pb-14 lg:p-6 lg:pb-14">
           {children}
         </main>
       </div>
