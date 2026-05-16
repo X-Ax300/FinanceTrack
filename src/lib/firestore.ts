@@ -8,7 +8,6 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   setDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -85,7 +84,7 @@ async function getCachedCollection<T>(
 ): Promise<T> {
   if (!options.forceRefresh) {
     const cached = getCache<T>(collectionName, userId);
-    if (cached) return cached;
+    if (cached && (!Array.isArray(cached) || cached.length > 0)) return cached;
   }
 
   const key = readKey(collectionName, userId);
@@ -120,6 +119,45 @@ async function updateDocWithLegacyFallback(
     if (!legacyCollectionPath) throw error;
     await updateDoc(doc(db, legacyCollectionPath, id), data);
   }
+}
+
+async function getUserScopedDocs<T>(
+  userId: string,
+  collectionName: string,
+  legacyCollectionNames: string[] = [],
+  sortFn?: (a: T, b: T) => number
+): Promise<T[]> {
+  const userPath = getUserCollectionPath(userId, collectionName);
+  const byId = new Map<string, T>();
+
+  const legacyReads = legacyCollectionNames.map(async (legacyName) => {
+    try {
+      const snap = await getDocs(query(collection(db, legacyName), where('userId', '==', userId)));
+      snap.docs.forEach((d) => {
+        byId.set(d.id, { id: d.id, ...d.data() } as T);
+      });
+    } catch (error) {
+      console.warn(`Legacy read failed for ${legacyName}:`, error);
+    }
+  });
+
+  await Promise.all(legacyReads);
+
+  const primarySnap = await getDocs(collection(db, userPath));
+  primarySnap.docs.forEach((d) => {
+    byId.set(d.id, { id: d.id, ...d.data() } as T);
+  });
+
+  const items = Array.from(byId.values());
+  return sortFn ? items.sort(sortFn) : items;
+}
+
+function sortByDateDesc<T extends { date?: string }>(a: T, b: T) {
+  return (b.date || '').localeCompare(a.date || '');
+}
+
+function sortByCreatedAtDesc<T extends { createdAt?: string }>(a: T, b: T) {
+  return (b.createdAt || '').localeCompare(a.createdAt || '');
 }
 
 async function deleteCardPaymentsForCard(cardId: string, userId: string) {
@@ -220,10 +258,7 @@ export async function deleteExpense(id: string, userId: string) {
 
 export async function getExpenses(userId: string, options?: GetOptions): Promise<Expense[]> {
   return getCachedCollection('expenses', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.expenses);
-    const q = query(collection(db, userPath), orderBy('date', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense));
+    return getUserScopedDocs<Expense>(userId, COLLECTIONS.expenses, [COLLECTIONS.expenses], sortByDateDesc);
   }, options);
 }
 
@@ -264,10 +299,7 @@ export async function deleteSalary(id: string, userId: string) {
 
 export async function getSalaries(userId: string, options?: GetOptions): Promise<Salary[]> {
   return getCachedCollection('salaries', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.salaries);
-    const q = query(collection(db, userPath), orderBy('date', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Salary));
+    return getUserScopedDocs<Salary>(userId, COLLECTIONS.salaries, [COLLECTIONS.salaries], sortByDateDesc);
   }, options);
 }
 
@@ -313,10 +345,12 @@ export async function deleteCreditCard(id: string, userId: string) {
 
 export async function getCreditCards(userId: string, options?: GetOptions): Promise<CreditCard[]> {
   return getCachedCollection('cards', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.cards);
-    const q = query(collection(db, userPath), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CreditCard));
+    return getUserScopedDocs<CreditCard>(
+      userId,
+      COLLECTIONS.cards,
+      [COLLECTIONS.cards, LEGACY_COLLECTIONS.cards],
+      sortByCreatedAtDesc
+    );
   }, options);
 }
 
@@ -338,10 +372,12 @@ export async function addCardPayment(data: Omit<CardPayment, 'id' | 'createdAt'>
 
 export async function getCardPayments(userId: string, options?: GetOptions): Promise<CardPayment[]> {
   return getCachedCollection('cardPayments', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.cardPayments);
-    const q = query(collection(db, userPath), orderBy('date', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CardPayment));
+    return getUserScopedDocs<CardPayment>(
+      userId,
+      COLLECTIONS.cardPayments,
+      [COLLECTIONS.cardPayments, LEGACY_COLLECTIONS.cardPayments],
+      sortByDateDesc
+    );
   }, options);
 }
 
@@ -370,10 +406,12 @@ export async function addCardCharge(data: Omit<CardCharge, 'id' | 'createdAt'>) 
 
 export async function getCardCharges(userId: string, options?: GetOptions): Promise<CardCharge[]> {
   return getCachedCollection('cardCharges', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.cardCharges);
-    const q = query(collection(db, userPath), orderBy('date', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as CardCharge));
+    return getUserScopedDocs<CardCharge>(
+      userId,
+      COLLECTIONS.cardCharges,
+      [COLLECTIONS.cardCharges, LEGACY_COLLECTIONS.cardCharges],
+      sortByDateDesc
+    );
   }, options);
 }
 
@@ -422,10 +460,12 @@ export async function deleteSavingGoal(id: string, userId: string) {
 
 export async function getSavingGoals(userId: string, options?: GetOptions): Promise<SavingGoal[]> {
   return getCachedCollection('goals', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.goals);
-    const q = query(collection(db, userPath), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SavingGoal));
+    return getUserScopedDocs<SavingGoal>(
+      userId,
+      COLLECTIONS.goals,
+      [COLLECTIONS.goals, LEGACY_COLLECTIONS.goals],
+      sortByCreatedAtDesc
+    );
   }, options);
 }
 
@@ -536,10 +576,7 @@ export async function addFriend(data: FriendInviteInput) {
 
 export async function getFriends(userId: string, options?: GetOptions): Promise<Friend[]> {
   return getCachedCollection('friends', userId, async () => {
-    const userPath = getUserCollectionPath(userId, COLLECTIONS.friends);
-    const q = query(collection(db, userPath), orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Friend));
+    return getUserScopedDocs<Friend>(userId, COLLECTIONS.friends, [COLLECTIONS.friends], sortByCreatedAtDesc);
   }, options);
 }
 
