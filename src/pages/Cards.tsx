@@ -1,14 +1,25 @@
 import { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, CreditCard, AlertTriangle, CheckCircle2, DollarSign } from 'lucide-react';
+import { Plus, Pencil, Trash2, CreditCard, AlertTriangle, DollarSign, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getCards, addCard, updateCard, deleteCard, getCardPayments, addCardPayment, deleteCardPayment } from '../lib/firestore';
-import { formatCurrency, formatDate, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
+import {
+  getCards,
+  addCard,
+  updateCard,
+  deleteCard,
+  getCardPayments,
+  addCardPayment,
+  deleteCardPayment,
+  getCardCharges,
+  addCardCharge,
+  deleteCardCharge,
+} from '../lib/firestore';
+import { formatCurrency, MONTHS, getCurrentMonth, getCurrentYear, CATEGORY_LABELS } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Input, { Select } from '../components/ui/Input';
-import type { CreditCard as CreditCardType, CardPayment } from '../types';
+import type { CreditCard as CreditCardType, CardPayment, CardCharge, ExpenseCategory } from '../types';
 
 const CARD_COLORS = ['#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981', '#f59e0b'];
 
@@ -21,31 +32,50 @@ const emptyPayForm = {
   date: new Date().toISOString().split('T')[0], note: '',
 };
 
+const emptyChargeForm = {
+  amount: '',
+  date: new Date().toISOString().split('T')[0],
+  description: '',
+  category: 'shopping' as ExpenseCategory,
+  note: '',
+};
+
+const CHARGE_CATEGORIES: ExpenseCategory[] = ['food', 'transport', 'streaming', 'services', 'shopping', 'health', 'education', 'other'];
+
 export default function Cards() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [payments, setPayments] = useState<CardPayment[]>([]);
+  const [charges, setCharges] = useState<CardCharge[]>([]);
   const [loading, setLoading] = useState(true);
   const [cardModal, setCardModal] = useState(false);
   const [payModal, setPayModal] = useState(false);
+  const [chargeModal, setChargeModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<CreditCardType | null>(null);
   const [cardForm, setCardForm] = useState(emptyCardForm);
   const [payForm, setPayForm] = useState(emptyPayForm);
+  const [chargeForm, setChargeForm] = useState(emptyChargeForm);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
   const curMonth = getCurrentMonth();
   const curYear = getCurrentYear();
 
-  async function load() {
+  async function load(forceRefresh = false) {
     if (!currentUser) return;
-    const [c, p] = await Promise.all([getCards(currentUser.uid), getCardPayments(currentUser.uid)]);
+    const [c, p, ch] = await Promise.all([
+      getCards(currentUser.uid, { forceRefresh }),
+      getCardPayments(currentUser.uid, { forceRefresh }),
+      getCardCharges(currentUser.uid, { forceRefresh }),
+    ]);
     setCards(c);
     setPayments(p);
+    setCharges(ch);
     setLoading(false);
   }
 
@@ -55,50 +85,103 @@ export default function Cards() {
     return payments.filter((p) => p.cardId === cardId && p.month === curMonth && p.year === curYear).reduce((a, p) => a + p.amount, 0);
   }
 
+  function getCardMonthCharges(cardId: string) {
+    return charges
+      .filter((charge) => {
+        const date = new Date(charge.date);
+        return charge.cardId === cardId && date.getMonth() + 1 === curMonth && date.getFullYear() === curYear;
+      })
+      .reduce((total, charge) => total + charge.amount, 0);
+  }
+
   async function handleSaveCard() {
     if (!currentUser || !cardForm.bankName || !cardForm.limit) return;
     setSaving(true);
-    const data = {
-      userId: currentUser.uid,
-      bankName: cardForm.bankName,
-      lastFour: cardForm.lastFour,
-      limit: parseFloat(cardForm.limit),
-      cutDate: parseInt(cardForm.cutDate),
-      payDate: parseInt(cardForm.payDate),
-      color: cardForm.color,
-    };
-    if (editId) {
-      await updateCard(editId, data);
-    } else {
-      await addCard(data);
+    setError('');
+    try {
+      const data = {
+        userId: currentUser.uid,
+        bankName: cardForm.bankName.trim(),
+        lastFour: cardForm.lastFour.trim(),
+        limit: parseFloat(cardForm.limit),
+        cutDate: parseInt(cardForm.cutDate),
+        payDate: parseInt(cardForm.payDate),
+        color: cardForm.color,
+      };
+      if (editId) {
+        await updateCard(editId, data);
+      } else {
+        await addCard(data);
+      }
+      await load(true);
+      setCardModal(false);
+    } catch (err) {
+      console.error('Failed to save card:', err);
+      setError('Could not save the credit card. Please check your connection and try again.');
+    } finally {
+      setSaving(false);
     }
-    await load();
-    setCardModal(false);
-    setSaving(false);
   }
 
   async function handleSavePayment() {
     if (!currentUser || !selectedCard || !payForm.amount) return;
     setSaving(true);
-    await addCardPayment({
-      userId: currentUser.uid,
-      cardId: selectedCard.id!,
-      amount: parseFloat(payForm.amount),
-      month: parseInt(payForm.month),
-      year: parseInt(payForm.year),
-      date: payForm.date,
-      note: payForm.note,
-    });
-    await load();
-    setPayModal(false);
-    setSaving(false);
+    setError('');
+    try {
+      await addCardPayment({
+        userId: currentUser.uid,
+        cardId: selectedCard.id!,
+        amount: parseFloat(payForm.amount),
+        month: parseInt(payForm.month),
+        year: parseInt(payForm.year),
+        date: payForm.date,
+        note: payForm.note,
+      });
+      await load(true);
+      setPayModal(false);
+    } catch (err) {
+      console.error('Failed to save card payment:', err);
+      setError('Could not save the payment. Please check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveCharge() {
+    if (!currentUser || !selectedCard || !chargeForm.amount || !chargeForm.description.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await addCardCharge({
+        userId: currentUser.uid,
+        cardId: selectedCard.id!,
+        amount: parseFloat(chargeForm.amount),
+        date: chargeForm.date,
+        description: chargeForm.description.trim(),
+        category: chargeForm.category,
+        note: chargeForm.note.trim() || undefined,
+      });
+      await load(true);
+      setChargeModal(false);
+    } catch (err) {
+      console.error('Failed to save card charge:', err);
+      setError('Could not save the card usage. Please check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDeleteCard() {
     if (!deleteId) return;
-    await deleteCard(deleteId);
-    setDeleteId(null);
-    await load();
+    setError('');
+    try {
+      await deleteCard(deleteId);
+      setDeleteId(null);
+      await load(true);
+    } catch (err) {
+      console.error('Failed to delete card:', err);
+      setError('Could not delete the card. Please try again.');
+    }
   }
 
   // Upcoming pay dates
@@ -122,6 +205,12 @@ export default function Cards() {
         </Button>
       </div>
 
+      {error && (
+        <Card className="p-4 border-red-500/30 bg-red-500/5">
+          <p className="text-sm text-red-400">{error}</p>
+        </Card>
+      )}
+
       {/* Alerts */}
       {upcomingPayments.length > 0 && (
         <Card className="p-4 border-amber-500/30 bg-amber-500/5">
@@ -141,7 +230,10 @@ export default function Cards() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {cards.map((card) => {
           const paid = getCardMonthPayment(card.id!);
+          const used = getCardMonthCharges(card.id!);
+          const balance = Math.max(0, used - paid);
           const cardPayments = payments.filter((p) => p.cardId === card.id).sort((a, b) => b.date.localeCompare(a.date));
+          const cardCharges = charges.filter((charge) => charge.cardId === card.id).sort((a, b) => b.date.localeCompare(a.date));
           const todayN = new Date().getDate();
           const daysUntilPay = card.payDate >= todayN ? card.payDate - todayN : card.payDate + 31 - todayN;
 
@@ -180,13 +272,42 @@ export default function Cards() {
                   <span className={`font-semibold ${textPrimary}`}>{formatCurrency(card.limit)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
+                  <span className={textSecondary}>Used this month</span>
+                  <span className="font-semibold text-rose-400">{formatCurrency(used)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
                   <span className={textSecondary}>Paid this month</span>
                   <span className="font-semibold text-emerald-400">{formatCurrency(paid)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className={textSecondary}>Pending balance</span>
+                  <span className={`font-semibold ${balance > 0 ? 'text-amber-400' : textPrimary}`}>{formatCurrency(balance)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className={textSecondary}>Days until payment</span>
                   <span className={`font-semibold ${daysUntilPay <= 3 ? 'text-amber-400' : textPrimary}`}>{daysUntilPay} days</span>
                 </div>
+
+                {/* Usage history */}
+                {cardCharges.length > 0 && (
+                  <div className={`mt-3 pt-3 border-t ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
+                    <p className={`text-xs font-medium ${textSecondary} mb-2`}>Recent Usage</p>
+                    {cardCharges.slice(0, 3).map((charge) => (
+                      <div key={charge.id} className="flex justify-between items-center py-1 gap-3">
+                        <div className="min-w-0">
+                          <p className={`text-xs truncate ${textPrimary}`}>{charge.description}</p>
+                          <p className={`text-xs ${textSecondary}`}>{charge.date}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-medium text-rose-400">{formatCurrency(charge.amount)}</span>
+                          <button onClick={() => { deleteCardCharge(charge.id!); load(true); }} className="text-gray-600 hover:text-red-400 transition-colors">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Payment history */}
                 {cardPayments.length > 0 && (
@@ -197,7 +318,7 @@ export default function Cards() {
                         <span className={`text-xs ${textSecondary}`}>{MONTHS[p.month - 1]} {p.year}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-emerald-400">{formatCurrency(p.amount)}</span>
-                          <button onClick={() => { deleteCardPayment(p.id!); load(); }} className="text-gray-600 hover:text-red-400 transition-colors">
+                          <button onClick={() => { deleteCardPayment(p.id!); load(true); }} className="text-gray-600 hover:text-red-400 transition-colors">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -206,14 +327,22 @@ export default function Cards() {
                   </div>
                 )}
 
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="w-full mt-1"
-                  onClick={() => { setSelectedCard(card); setPayForm(emptyPayForm); setPayModal(true); }}
-                >
-                  <DollarSign className="w-3.5 h-3.5" /> Register Payment
-                </Button>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => { setSelectedCard(card); setChargeForm(emptyChargeForm); setChargeModal(true); }}
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" /> Use
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => { setSelectedCard(card); setPayForm(emptyPayForm); setPayModal(true); }}
+                  >
+                    <DollarSign className="w-3.5 h-3.5" /> Pay
+                  </Button>
+                </div>
               </div>
             </div>
           );
@@ -258,6 +387,53 @@ export default function Cards() {
           <div className="flex gap-3 pt-2">
             <Button variant="ghost" className="flex-1" onClick={() => setCardModal(false)}>Cancel</Button>
             <Button className="flex-1" onClick={handleSaveCard} loading={saving}>{editId ? 'Save Changes' : 'Add Card'}</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Usage modal */}
+      <Modal open={chargeModal} onClose={() => setChargeModal(false)} title={`Card Usage — ${selectedCard?.bankName}`}>
+        <div className="space-y-4">
+          <Input
+            label="Description"
+            value={chargeForm.description}
+            onChange={(e) => setChargeForm({ ...chargeForm, description: e.target.value })}
+            placeholder="Groceries, fuel, subscription..."
+            required
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Amount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={chargeForm.amount}
+              onChange={(e) => setChargeForm({ ...chargeForm, amount: e.target.value })}
+              placeholder="0.00"
+              required
+            />
+            <Input
+              label="Date"
+              type="date"
+              value={chargeForm.date}
+              onChange={(e) => setChargeForm({ ...chargeForm, date: e.target.value })}
+              required
+            />
+          </div>
+          <Select label="Category" value={chargeForm.category} onChange={(e) => setChargeForm({ ...chargeForm, category: e.target.value as ExpenseCategory })}>
+            {CHARGE_CATEGORIES.map((category) => (
+              <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>
+            ))}
+          </Select>
+          <Input
+            label="Note (optional)"
+            value={chargeForm.note}
+            onChange={(e) => setChargeForm({ ...chargeForm, note: e.target.value })}
+            placeholder="Additional details..."
+          />
+          <div className="flex gap-3 pt-2">
+            <Button variant="ghost" className="flex-1" onClick={() => setChargeModal(false)}>Cancel</Button>
+            <Button className="flex-1" onClick={handleSaveCharge} loading={saving}>Register Usage</Button>
           </div>
         </div>
       </Modal>

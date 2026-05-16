@@ -10,15 +10,24 @@ import {
 } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getExpenses, getSalaries, getCards, getCardPayments, getGoals } from '../lib/firestore';
-import { formatCurrency, getCurrentMonth, getCurrentYear, MONTHS, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/utils';
+import { getExpenses, getSalaries, getCards, getCardCharges, getGoals } from '../lib/firestore';
+import {
+  combineExpensesWithCardCharges,
+  formatCurrency,
+  getCurrentMonth,
+  getCurrentYear,
+  MONTHS,
+  CATEGORY_COLORS,
+  CATEGORY_LABELS,
+} from '../lib/utils';
 import Card from '../components/ui/Card';
-import type { Expense, Salary, CreditCard as CreditCardType, SavingGoal } from '../types';
+import type { CardCharge, Expense, Salary, CreditCard as CreditCardType, SavingGoal } from '../types';
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [goals, setGoals] = useState<SavingGoal[]>([]);
@@ -33,22 +42,26 @@ export default function Dashboard() {
       getExpenses(currentUser.uid),
       getSalaries(currentUser.uid),
       getCards(currentUser.uid),
+      getCardCharges(currentUser.uid),
       getGoals(currentUser.uid),
-    ]).then(([exp, sal, crd, gls]) => {
+    ]).then(([exp, sal, crd, charges, gls]) => {
       setExpenses(exp);
       setSalaries(sal);
       setCards(crd);
+      setCardCharges(charges);
       setGoals(gls);
       setLoading(false);
     });
   }, [currentUser]);
 
-  const monthExpenses = expenses.filter((e) => {
+  const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
+
+  const monthExpenses = allExpenses.filter((e) => {
     const d = new Date(e.date);
     return d.getMonth() + 1 === curMonth && d.getFullYear() === curYear;
   });
 
-  const prevMonthExpenses = expenses.filter((e) => {
+  const prevMonthExpenses = allExpenses.filter((e) => {
     const d = new Date(e.date);
     const pm = curMonth === 1 ? 12 : curMonth - 1;
     const py = curMonth === 1 ? curYear - 1 : curYear;
@@ -94,7 +107,7 @@ export default function Dashboard() {
     const month = ((curMonth - 1 - (5 - i) + 12) % 12) + 1;
     const year = curMonth - (5 - i) <= 0 ? curYear - 1 : curYear;
     const inc = salaries.filter((s) => s.month === month && s.year === year).reduce((a, s) => a + s.amount, 0);
-    const exp = expenses
+    const exp = allExpenses
       .filter((e) => {
         const d = new Date(e.date);
         return d.getMonth() + 1 === month && d.getFullYear() === year;

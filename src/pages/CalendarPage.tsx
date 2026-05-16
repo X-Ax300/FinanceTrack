@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, CreditCard, DollarSign, ShoppingBag } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getExpenses, getSalaries, getCards } from '../lib/firestore';
-import { formatCurrency, MONTHS } from '../lib/utils';
+import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
+import { combineExpensesWithCardCharges, formatCurrency, MONTHS } from '../lib/utils';
 import Card from '../components/ui/Card';
-import type { Expense, Salary, CreditCard as CreditCardType } from '../types';
+import type { CardCharge, Expense, Salary, CreditCard as CreditCardType } from '../types';
 
 interface CalEvent {
   day: number;
@@ -19,6 +19,7 @@ export default function CalendarPage() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -29,8 +30,8 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (!currentUser) return;
-    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid), getCards(currentUser.uid)])
-      .then(([exp, sal, crd]) => { setExpenses(exp); setSalaries(sal); setCards(crd); setLoading(false); });
+    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid), getCards(currentUser.uid), getCardCharges(currentUser.uid)])
+      .then(([exp, sal, crd, charges]) => { setExpenses(exp); setSalaries(sal); setCards(crd); setCardCharges(charges); setLoading(false); });
   }, [currentUser]);
 
   const year = currentDate.getFullYear();
@@ -40,8 +41,9 @@ export default function CalendarPage() {
 
   // Build events for the month
   const eventsByDay: Record<number, CalEvent[]> = {};
+  const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
-  expenses.forEach((e) => {
+  allExpenses.forEach((e) => {
     const d = new Date(e.date);
     if (d.getMonth() === month && d.getFullYear() === year) {
       const day = d.getDate();
@@ -206,7 +208,7 @@ export default function CalendarPage() {
               <div>
                 <p className={`text-xs ${textSecondary}`}>Expenses</p>
                 <p className="text-base font-bold text-rose-400">
-                  {formatCurrency(expenses.filter((e) => { const d = new Date(e.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((a, e) => a + e.amount, 0))}
+                  {formatCurrency(allExpenses.filter((e) => { const d = new Date(e.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((a, e) => a + e.amount, 0))}
                 </p>
               </div>
               <div>

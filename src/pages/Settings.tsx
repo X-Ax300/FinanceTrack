@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { User, Shield, Bell, Palette, LogOut, Save, Eye, EyeOff } from 'lucide-react';
+import { User, Shield, Palette, LogOut, Save, Eye, EyeOff, Languages } from 'lucide-react';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { Language, useLanguage } from '../contexts/LanguageContext';
 import { auth } from '../lib/firebase';
+import { CURRENCIES, getStoredCurrency } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -11,6 +13,7 @@ import Input from '../components/ui/Input';
 export default function Settings() {
   const { currentUser, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { language, setLanguage, t } = useLanguage();
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -20,7 +23,7 @@ export default function Settings() {
   const [savingPassword, setSavingPassword] = useState(false);
   const [profileMsg, setProfileMsg] = useState('');
   const [passwordMsg, setPasswordMsg] = useState('');
-  const [currency, setCurrency] = useState(localStorage.getItem('ft-currency') || 'USD');
+  const [currency, setCurrency] = useState(getStoredCurrency());
 
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
@@ -31,27 +34,27 @@ export default function Settings() {
     setProfileMsg('');
     try {
       await updateProfile(currentUser, { displayName });
-      setProfileMsg('Profile updated successfully.');
+      setProfileMsg(t('Profile updated successfully.'));
     } catch {
-      setProfileMsg('Failed to update profile.');
+      setProfileMsg(t('Failed to update profile.'));
     }
     setSavingProfile(false);
   }
 
   async function handleChangePassword() {
     if (!currentUser?.email || !currentPassword || !newPassword) return;
-    if (newPassword.length < 6) { setPasswordMsg('New password must be at least 6 characters.'); return; }
+    if (newPassword.length < 6) { setPasswordMsg(t('New password must be at least 6 characters.')); return; }
     setSavingPassword(true);
     setPasswordMsg('');
     try {
       const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
       await reauthenticateWithCredential(currentUser, credential);
       await updatePassword(currentUser, newPassword);
-      setPasswordMsg('Password changed successfully.');
+      setPasswordMsg(t('Password changed successfully.'));
       setCurrentPassword('');
       setNewPassword('');
     } catch {
-      setPasswordMsg('Current password is incorrect.');
+      setPasswordMsg(t('Current password is incorrect.'));
     }
     setSavingPassword(false);
   }
@@ -61,13 +64,11 @@ export default function Settings() {
     localStorage.setItem('ft-currency', val);
   }
 
-  const CURRENCIES = ['USD', 'EUR', 'GBP', 'MXN', 'CAD', 'ARS', 'COP', 'BRL', 'JPY'];
-
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className={`text-2xl font-bold ${textPrimary}`}>Settings</h1>
-        <p className={`text-sm mt-1 ${textSecondary}`}>Manage your account and preferences</p>
+        <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Settings')}</h1>
+        <p className={`text-sm mt-1 ${textSecondary}`}>{t('Manage your account and preferences')}</p>
       </div>
 
       {/* Profile */}
@@ -76,7 +77,7 @@ export default function Settings() {
           <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
             <User className="w-4 h-4 text-cyan-400" />
           </div>
-          <h2 className={`text-base font-semibold ${textPrimary}`}>Profile</h2>
+          <h2 className={`text-base font-semibold ${textPrimary}`}>{t('Profile')}</h2>
         </div>
 
         <div className="flex items-center gap-4 mb-5">
@@ -84,24 +85,24 @@ export default function Settings() {
             {displayName[0]?.toUpperCase() || currentUser?.email?.[0]?.toUpperCase() || 'U'}
           </div>
           <div>
-            <p className={`font-semibold ${textPrimary}`}>{displayName || 'No name set'}</p>
+            <p className={`font-semibold ${textPrimary}`}>{displayName || t('No name set')}</p>
             <p className={`text-sm ${textSecondary}`}>{currentUser?.email}</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <Input
-            label="Display Name"
+            label={t('Display Name')}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Your name"
+            placeholder={t('Your name')}
           />
-          <Input label="Email" value={currentUser?.email || ''} disabled className="opacity-60 cursor-not-allowed" />
+          <Input label={t('Email')} value={currentUser?.email || ''} disabled className="opacity-60 cursor-not-allowed" />
           {profileMsg && (
             <p className={`text-sm ${profileMsg.includes('success') ? 'text-emerald-400' : 'text-rose-400'}`}>{profileMsg}</p>
           )}
           <Button onClick={handleSaveProfile} loading={savingProfile} size="sm">
-            <Save className="w-3.5 h-3.5" /> Save Profile
+            <Save className="w-3.5 h-3.5" /> {t('Save Profile')}
           </Button>
         </div>
       </Card>
@@ -112,12 +113,12 @@ export default function Settings() {
           <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
             <Shield className="w-4 h-4 text-amber-400" />
           </div>
-          <h2 className={`text-base font-semibold ${textPrimary}`}>Security</h2>
+          <h2 className={`text-base font-semibold ${textPrimary}`}>{t('Security')}</h2>
         </div>
 
         <div className="space-y-4">
           <div className="flex flex-col gap-1.5">
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>Current Password</label>
+            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{t('Current Password')}</label>
             <div className="relative">
               <input
                 type={showCurrent ? 'text' : 'password'}
@@ -134,13 +135,13 @@ export default function Settings() {
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>New Password</label>
+            <label className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>{t('New Password')}</label>
             <div className="relative">
               <input
                 type={showNew ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Min 6 characters"
+                placeholder={t('Min 6 characters')}
                 className={`w-full px-3.5 py-2.5 pr-10 rounded-xl text-sm border outline-none transition-all
                   ${theme === 'dark' ? 'bg-gray-800/60 border-gray-700 text-white placeholder-gray-500 focus:border-cyan-500/60' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
               />
@@ -154,7 +155,7 @@ export default function Settings() {
             <p className={`text-sm ${passwordMsg.includes('success') ? 'text-emerald-400' : 'text-rose-400'}`}>{passwordMsg}</p>
           )}
           <Button onClick={handleChangePassword} loading={savingPassword} size="sm" variant="secondary">
-            <Shield className="w-3.5 h-3.5" /> Change Password
+            <Shield className="w-3.5 h-3.5" /> {t('Change Password')}
           </Button>
         </div>
       </Card>
@@ -165,15 +166,15 @@ export default function Settings() {
           <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
             <Palette className="w-4 h-4 text-blue-400" />
           </div>
-          <h2 className={`text-base font-semibold ${textPrimary}`}>Preferences</h2>
+          <h2 className={`text-base font-semibold ${textPrimary}`}>{t('Preferences')}</h2>
         </div>
 
         <div className="space-y-4">
           {/* Theme toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <p className={`text-sm font-medium ${textPrimary}`}>Theme</p>
-              <p className={`text-xs ${textSecondary}`}>Choose your preferred appearance</p>
+              <p className={`text-sm font-medium ${textPrimary}`}>{t('Theme')}</p>
+              <p className={`text-xs ${textSecondary}`}>{t('Choose your preferred appearance')}</p>
             </div>
             <button
               onClick={toggleTheme}
@@ -183,11 +184,30 @@ export default function Settings() {
             </button>
           </div>
 
+          {/* Language */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className={`text-sm font-medium ${textPrimary}`}>{t('Language')}</p>
+              <p className={`text-xs ${textSecondary}`}>{t('Choose your preferred language')}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Languages className={`w-4 h-4 ${textSecondary}`} />
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as Language)}
+                className={`px-3 py-1.5 rounded-xl text-sm border outline-none ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
+              >
+                <option value="en">{t('English')}</option>
+                <option value="es">{t('Spanish')}</option>
+              </select>
+            </div>
+          </div>
+
           {/* Currency */}
           <div className="flex items-center justify-between">
             <div>
-              <p className={`text-sm font-medium ${textPrimary}`}>Currency</p>
-              <p className={`text-xs ${textSecondary}`}>Display currency for amounts</p>
+              <p className={`text-sm font-medium ${textPrimary}`}>{t('Currency')}</p>
+              <p className={`text-xs ${textSecondary}`}>{t('Display currency for amounts')}</p>
             </div>
             <select
               value={currency}
@@ -206,10 +226,10 @@ export default function Settings() {
           <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
             <LogOut className="w-4 h-4 text-red-400" />
           </div>
-          <h2 className={`text-base font-semibold ${textPrimary}`}>Account</h2>
+          <h2 className={`text-base font-semibold ${textPrimary}`}>{t('Account')}</h2>
         </div>
         <Button variant="danger" size="sm" onClick={logout}>
-          <LogOut className="w-3.5 h-3.5" /> Sign Out
+          <LogOut className="w-3.5 h-3.5" /> {t('Sign Out')}
         </Button>
       </Card>
     </div>

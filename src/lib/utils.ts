@@ -1,6 +1,12 @@
-import type { ExpenseCategory } from '../types';
+import type { CardCharge, CreditCard, Expense, ExpenseCategory } from '../types';
 
-export function formatCurrency(amount: number, currency = 'USD'): string {
+export const CURRENCIES = ['USD', 'DOP', 'EUR', 'GBP', 'MXN', 'CAD', 'ARS', 'COP', 'BRL', 'JPY'];
+
+export function getStoredCurrency(): string {
+  return localStorage.getItem('ft-currency') || 'USD';
+}
+
+export function formatCurrency(amount: number, currency = getStoredCurrency()): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
@@ -14,6 +20,35 @@ export function formatDate(dateStr: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+export function cardChargesToExpenses(charges: CardCharge[], cards: CreditCard[] = []): Expense[] {
+  const cardNameById = new Map(cards.map((card) => [card.id, card.bankName]));
+
+  return charges.map((charge) => {
+    const cardName = cardNameById.get(charge.cardId) || 'Credit Card';
+
+    return {
+      id: `card-charge-${charge.id || `${charge.cardId}-${charge.date}-${charge.amount}`}`,
+      userId: charge.userId,
+      name: charge.description || `Credit card usage - ${cardName}`,
+      category: charge.category || 'shopping',
+      amount: charge.amount,
+      method: 'credit',
+      date: charge.date,
+      description: charge.note ? `${cardName}: ${charge.note}` : `Credit card usage - ${cardName}`,
+      createdAt: charge.createdAt,
+      updatedAt: charge.createdAt,
+    };
+  });
+}
+
+export function combineExpensesWithCardCharges(
+  expenses: Expense[],
+  charges: CardCharge[],
+  cards: CreditCard[] = []
+): Expense[] {
+  return [...expenses, ...cardChargesToExpenses(charges, cards)].sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function getCurrentMonth(): number {

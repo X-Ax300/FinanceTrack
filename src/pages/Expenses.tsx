@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { Plus, Search, Pencil, Trash2, Filter, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getExpenses, addExpense, updateExpense, deleteExpense } from '../lib/firestore';
-import { formatCurrency, formatDate, CATEGORY_LABELS, CATEGORY_COLORS, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
+import { getExpenses, addExpense, updateExpense, deleteExpense, getCards, getCardCharges, deleteCardCharge } from '../lib/firestore';
+import { combineExpensesWithCardCharges, formatCurrency, formatDate, CATEGORY_LABELS, CATEGORY_COLORS, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Input, { Select } from '../components/ui/Input';
-import type { Expense, ExpenseCategory, PaymentMethod } from '../types';
+import type { CardCharge, CreditCard, Expense, ExpenseCategory, PaymentMethod } from '../types';
 
 const CATEGORIES: ExpenseCategory[] = ['food', 'transport', 'streaming', 'services', 'shopping', 'health', 'education', 'savings', 'other'];
 const METHODS: PaymentMethod[] = ['cash', 'credit', 'debit', 'transfer'];
@@ -23,6 +23,8 @@ export default function Expenses() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
+  const [cards, setCards] = useState<CreditCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -39,8 +41,14 @@ export default function Expenses() {
 
   async function load() {
     if (!currentUser) return;
-    const data = await getExpenses(currentUser.uid);
+    const [data, crd, charges] = await Promise.all([
+      getExpenses(currentUser.uid),
+      getCards(currentUser.uid),
+      getCardCharges(currentUser.uid),
+    ]);
     setExpenses(data);
+    setCards(crd);
+    setCardCharges(charges);
     setLoading(false);
   }
 
@@ -53,6 +61,7 @@ export default function Expenses() {
   }
 
   function openEdit(e: Expense) {
+    if (e.id?.startsWith('card-charge-')) return;
     setEditId(e.id!);
     setForm({ name: e.name, category: e.category, amount: String(e.amount), method: e.method, date: e.date, description: e.description || '' });
     setModalOpen(true);
@@ -82,12 +91,18 @@ export default function Expenses() {
 
   async function handleDelete() {
     if (!deleteId) return;
-    await deleteExpense(deleteId);
+    if (deleteId.startsWith('card-charge-')) {
+      await deleteCardCharge(deleteId.replace('card-charge-', ''));
+    } else {
+      await deleteExpense(deleteId);
+    }
     setDeleteId(null);
     await load();
   }
 
-  const filtered = expenses.filter((e) => {
+  const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
+
+  const filtered = allExpenses.filter((e) => {
     const d = new Date(e.date);
     const matchMonth = !filterMonth || d.getMonth() + 1 === parseInt(filterMonth);
     const matchYear = !filterYear || d.getFullYear() === parseInt(filterYear);
@@ -197,9 +212,11 @@ export default function Expenses() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => openEdit(e)} className="p-1.5 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
+                      {!e.id?.startsWith('card-charge-') && (
+                        <button onClick={() => openEdit(e)} className="p-1.5 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       <button onClick={() => setDeleteId(e.id!)} className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

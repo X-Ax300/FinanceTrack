@@ -2,11 +2,13 @@ import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TrendingUp, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 
 export default function Login() {
   const { login, loginWithGoogle } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +25,7 @@ export default function Login() {
       await login(email, password);
       navigate('/');
     } catch {
-      setError('Invalid email or password. Please try again.');
+      setError(t('Invalid email or password. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -36,7 +38,7 @@ export default function Login() {
       await loginWithGoogle();
       navigate('/');
     } catch {
-      setError('Failed to sign in with Google. Please try again.');
+      setError(t('Failed to sign in with Google. Please try again.'));
     } finally {
       setGoogleLoading(false);
     }
@@ -58,12 +60,12 @@ export default function Login() {
             <TrendingUp className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-1">FinanceTrack</h1>
-          <p className="text-gray-500 text-sm">Smart financial control at your fingertips</p>
+          <p className="text-gray-500 text-sm">{t('Smart financial control at your fingertips')}</p>
         </div>
 
         {/* Card */}
         <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/60 rounded-2xl p-8 shadow-2xl">
-          <h2 className="text-xl font-semibold text-white mb-6">Welcome back</h2>
+          <h2 className="text-xl font-semibold text-white mb-6">{t('Welcome back')}</h2>
 
           {error && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -73,7 +75,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Email"
+              label={t('Email')}
               type="email"
               placeholder="you@example.com"
               value={email}
@@ -82,9 +84,10 @@ export default function Login() {
             />
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-300">Password</label>
+              <label htmlFor="password" className="text-sm font-medium text-gray-300">{t('Password')}</label>
               <div className="relative">
                 <input
+                  id="password"
                   type={showPass ? 'text' : 'password'}
                   placeholder="••••••••"
                   value={password}
@@ -100,13 +103,26 @@ export default function Login() {
                   {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Link to="/forgot-password" className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+                {t('Forgot password?')}
+              </Link>
+            </div>
+
+            <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
+              {t('Sign in')}
+            </Button>
+          </form>
+
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-900/80 text-gray-500">Or continue with</span>
+              <span className="px-2 bg-gray-900/80 text-gray-500">{t('Or continue with')}</span>
             </div>
           </div>
 
@@ -135,26 +151,13 @@ export default function Login() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            {googleLoading ? 'Signing in...' : 'Sign in with Google'}
+            {googleLoading ? t('Signing in...') : t('Sign in with Google')}
           </button>
 
-            </div>
-
-            <div className="flex justify-end">
-              <Link to="/forgot-password" className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
-                Forgot password?
-              </Link>
-            </div>
-
-            <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
-              Sign In
-            </Button>
-          </form>
-
           <p className="text-center text-sm text-gray-500 mt-6">
-            Don't have an account?{' '}
+            {t("Don't have an account?")}{' '}
             <Link to="/register" className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
-              Create one
+              {t('Create one')}
             </Link>
           </p>
         </div>

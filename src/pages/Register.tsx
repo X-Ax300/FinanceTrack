@@ -2,11 +2,13 @@ import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { TrendingUp, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 
 export default function Register() {
   const { signup, loginWithGoogle } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -19,7 +21,7 @@ export default function Register() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError(t('Password must be at least 6 characters.'));
       return;
     }
     setError('');
@@ -30,9 +32,9 @@ export default function Register() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       if (msg.includes('email-already-in-use')) {
-        setError('This email is already registered.');
+        setError(t('This email is already registered.'));
       } else {
-        setError('Failed to create account. Please try again.');
+        setError(t('Failed to create account. Please try again.'));
       }
     } finally {
       setLoading(false);
@@ -46,7 +48,7 @@ export default function Register() {
       await loginWithGoogle();
       navigate('/');
     } catch {
-      setError('Failed to sign up with Google. Please try again.');
+      setError(t('Failed to sign up with Google. Please try again.'));
     } finally {
       setGoogleLoading(false);
     }
@@ -65,11 +67,11 @@ export default function Register() {
             <TrendingUp className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold text-white mb-1">FinanceTrack</h1>
-          <p className="text-gray-500 text-sm">Start your financial journey today</p>
+          <p className="text-gray-500 text-sm">{t('Start your financial journey today')}</p>
         </div>
 
         <div className="bg-gray-900/80 backdrop-blur-xl border border-gray-800/60 rounded-2xl p-8 shadow-2xl">
-          <h2 className="text-xl font-semibold text-white mb-6">Create your account</h2>
+          <h2 className="text-xl font-semibold text-white mb-6">{t('Create your account')}</h2>
 
           {error && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -79,7 +81,7 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              label="Full Name"
+              label={t('Full Name')}
               type="text"
               placeholder="John Doe"
               value={name}
@@ -88,7 +90,7 @@ export default function Register() {
             />
 
             <Input
-              label="Email"
+              label={t('Email')}
               type="email"
               placeholder="you@example.com"
               value={email}
@@ -97,11 +99,12 @@ export default function Register() {
             />
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-gray-300">Password</label>
+              <label htmlFor="password" className="text-sm font-medium text-gray-300">{t('Password')}</label>
               <div className="relative">
                 <input
+                  id="password"
                   type={showPass ? 'text' : 'password'}
-                  placeholder="Min 6 characters"
+                  placeholder={t('Min 6 characters')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -109,13 +112,26 @@ export default function Register() {
                 />
                 <button
                   type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
+              {t('Create Account')}
+            </Button>
+          </form>
+
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-700"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-gray-900/80 text-gray-500">Or sign up with</span>
+              <span className="px-2 bg-gray-900/80 text-gray-500">{t('Or sign up with')}</span>
             </div>
           </div>
 
@@ -144,26 +160,13 @@ export default function Register() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            {googleLoading ? 'Signing up...' : 'Sign up with Google'}
+            {googleLoading ? t('Signing up...') : t('Sign up with Google')}
           </button>
 
-                  onClick={() => setShowPass(!showPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <Button type="submit" size="lg" loading={loading} className="w-full mt-2">
-              Create Account
-            </Button>
-          </form>
-
           <p className="text-center text-sm text-gray-500 mt-6">
-            Already have an account?{' '}
+            {t('Already have an account?')}{' '}
             <Link to="/login" className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
-              Sign in
+              {t('Sign in')}
             </Link>
           </p>
         </div>

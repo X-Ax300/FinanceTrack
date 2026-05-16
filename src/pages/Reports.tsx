@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react';
 import { FileText, Download, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getExpenses, getSalaries, getCards } from '../lib/firestore';
-import { formatCurrency, MONTHS, CATEGORY_LABELS, getCurrentMonth, getCurrentYear } from '../lib/utils';
+import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
+import { combineExpensesWithCardCharges, formatCurrency, MONTHS, CATEGORY_LABELS, getCurrentYear } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import type { Expense, Salary } from '../types';
+import type { CardCharge, CreditCard, Expense, Salary } from '../types';
 
 export default function Reports() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
+  const [cards, setCards] = useState<CreditCard[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(getCurrentYear());
@@ -21,15 +23,17 @@ export default function Reports() {
 
   useEffect(() => {
     if (!currentUser) return;
-    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid)])
-      .then(([exp, sal]) => { setExpenses(exp); setSalaries(sal); setLoading(false); });
+    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid), getCards(currentUser.uid), getCardCharges(currentUser.uid)])
+      .then(([exp, sal, crd, charges]) => { setExpenses(exp); setSalaries(sal); setCards(crd); setCardCharges(charges); setLoading(false); });
   }, [currentUser]);
+
+  const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
   // Monthly summary
   const monthlySummary = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
     const income = salaries.filter((s) => s.month === m && s.year === selectedYear).reduce((a, s) => a + s.amount, 0);
-    const expense = expenses.filter((e) => {
+    const expense = allExpenses.filter((e) => {
       const d = new Date(e.date);
       return d.getMonth() + 1 === m && d.getFullYear() === selectedYear;
     }).reduce((a, e) => a + e.amount, 0);
@@ -41,7 +45,7 @@ export default function Reports() {
   const yearSavings = yearIncome - yearExpense;
 
   // Category totals for year
-  const yearExpenses = expenses.filter((e) => new Date(e.date).getFullYear() === selectedYear);
+  const yearExpenses = allExpenses.filter((e) => new Date(e.date).getFullYear() === selectedYear);
   const catTotals = yearExpenses.reduce((acc, e) => {
     acc[e.category] = (acc[e.category] || 0) + e.amount;
     return acc;

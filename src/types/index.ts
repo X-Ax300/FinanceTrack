@@ -69,6 +69,18 @@ export interface CardPayment {
   createdAt: string;
 }
 
+export interface CardCharge {
+  id?: string;
+  cardId: string;
+  userId: string;
+  amount: number;
+  date: string;
+  description: string;
+  category?: ExpenseCategory;
+  note?: string;
+  createdAt: string;
+}
+
 export interface SavingGoal {
   id?: string;
   userId: string;

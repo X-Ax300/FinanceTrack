@@ -5,18 +5,21 @@ import {
 } from 'recharts';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getExpenses, getSalaries } from '../lib/firestore';
+import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
 import {
+  combineExpensesWithCardCharges,
   formatCurrency, MONTHS, CATEGORY_LABELS, CATEGORY_COLORS,
   getCurrentMonth, getCurrentYear,
 } from '../lib/utils';
 import Card from '../components/ui/Card';
-import type { Expense, Salary, ExpenseCategory } from '../types';
+import type { CardCharge, CreditCard, Expense, Salary, ExpenseCategory } from '../types';
 
 export default function Statistics() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
+  const [cards, setCards] = useState<CreditCard[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
@@ -33,14 +36,18 @@ export default function Statistics() {
 
   useEffect(() => {
     if (!currentUser) return;
-    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid)]).then(([exp, sal]) => {
+    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid), getCards(currentUser.uid), getCardCharges(currentUser.uid)]).then(([exp, sal, crd, charges]) => {
       setExpenses(exp);
       setSalaries(sal);
+      setCards(crd);
+      setCardCharges(charges);
       setLoading(false);
     });
   }, [currentUser]);
 
-  const monthExpenses = expenses.filter((e) => {
+  const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
+
+  const monthExpenses = allExpenses.filter((e) => {
     const d = new Date(e.date);
     return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
   });
@@ -69,7 +76,7 @@ export default function Statistics() {
   const trendData = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
     const inc = salaries.filter((s) => s.month === m && s.year === selectedYear).reduce((a, s) => a + s.amount, 0);
-    const exp = expenses.filter((e) => {
+    const exp = allExpenses.filter((e) => {
       const d = new Date(e.date);
       return d.getMonth() + 1 === m && d.getFullYear() === selectedYear;
     }).reduce((a, e) => a + e.amount, 0);
@@ -87,7 +94,7 @@ export default function Statistics() {
 
   // Avg monthly expense
   const monthsWithExpenses = Array.from({ length: 12 }, (_, i) =>
-    expenses.filter((e) => new Date(e.date).getMonth() === i && new Date(e.date).getFullYear() === selectedYear)
+    allExpenses.filter((e) => new Date(e.date).getMonth() === i && new Date(e.date).getFullYear() === selectedYear)
       .reduce((a, e) => a + e.amount, 0)
   ).filter((v) => v > 0);
   const avgMonthly = monthsWithExpenses.length ? monthsWithExpenses.reduce((a, v) => a + v, 0) / monthsWithExpenses.length : 0;
