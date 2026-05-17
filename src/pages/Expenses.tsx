@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getExpenses, addExpense, updateExpense, deleteExpense, getCards, getCardCharges, deleteCardCharge } from '../lib/firestore';
-import { combineExpensesWithCardCharges, formatCurrency, formatDate, CATEGORY_LABELS, CATEGORY_COLORS, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
+import { combineExpensesWithCardCharges, formatCurrency, formatDate, parseDateString, CATEGORY_LABELS, CATEGORY_COLORS, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
 import { useNotifications } from '../hooks/useNotifications';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
@@ -120,7 +120,7 @@ export default function Expenses() {
   const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
   const filtered = allExpenses.filter((e) => {
-    const d = new Date(e.date);
+    const d = parseDateString(e.date);
     const matchMonth = !filterMonth || d.getMonth() + 1 === parseInt(filterMonth);
     const matchYear = !filterYear || d.getFullYear() === parseInt(filterYear);
     const matchCat = !filterCat || e.category === filterCat;

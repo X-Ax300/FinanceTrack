@@ -6,14 +6,17 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
+import { getExpenses, getSalaries, getCards, getCardCharges, getCardPayments } from '../lib/firestore';
 import {
   combineExpensesWithCardCharges,
+  getMonthCardPayments,
+  getMonthCashOutflow,
   formatCurrency, MONTHS, CATEGORY_LABELS, CATEGORY_COLORS,
   getCurrentMonth, getCurrentYear,
+  parseDateString,
 } from '../lib/utils';
 import Card from '../components/ui/Card';
-import type { CardCharge, CreditCard, Expense, Salary, ExpenseCategory } from '../types';
+import type { CardCharge, CardPayment, CreditCard, Expense, Salary, ExpenseCategory } from '../types';
 
 export default function Statistics() {
   const { currentUser } = useAuth();
@@ -21,6 +24,7 @@ export default function Statistics() {
   const { t } = useLanguage();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
+  const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,11 +42,18 @@ export default function Statistics() {
 
   useEffect(() => {
     if (!currentUser) return;
-    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid), getCards(currentUser.uid), getCardCharges(currentUser.uid)]).then(([exp, sal, crd, charges]) => {
+    Promise.all([
+      getExpenses(currentUser.uid),
+      getSalaries(currentUser.uid),
+      getCards(currentUser.uid),
+      getCardCharges(currentUser.uid),
+      getCardPayments(currentUser.uid),
+    ]).then(([exp, sal, crd, charges, payments]) => {
       setExpenses(exp);
       setSalaries(sal);
       setCards(crd);
       setCardCharges(charges);
+      setCardPayments(payments);
       setLoading(false);
     });
   }, [currentUser]);
@@ -50,11 +61,13 @@ export default function Statistics() {
   const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
   const monthExpenses = allExpenses.filter((e) => {
-    const d = new Date(e.date);
+    const d = parseDateString(e.date);
     return d.getMonth() + 1 === selectedMonth && d.getFullYear() === selectedYear;
   });
 
   const totalExpense = monthExpenses.reduce((a, e) => a + e.amount, 0);
+  const cardPaymentsTotal = getMonthCardPayments(cardPayments, selectedMonth, selectedYear);
+  const cashOutflow = getMonthCashOutflow(expenses, cardPayments, selectedMonth, selectedYear);
   const totalIncome = salaries
     .filter((s) => s.month === selectedMonth && s.year === selectedYear)
     .reduce((a, s) => a + s.amount, 0);
@@ -78,11 +91,8 @@ export default function Statistics() {
   const trendData = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1;
     const inc = salaries.filter((s) => s.month === m && s.year === selectedYear).reduce((a, s) => a + s.amount, 0);
-    const exp = allExpenses.filter((e) => {
-      const d = new Date(e.date);
-      return d.getMonth() + 1 === m && d.getFullYear() === selectedYear;
-    }).reduce((a, e) => a + e.amount, 0);
-    return { month: t(MONTHS[m - 1]).slice(0, 3), income: inc, expenses: exp, savings: Math.max(0, inc - exp) };
+    const outflow = getMonthCashOutflow(expenses, cardPayments, m, selectedYear);
+    return { month: t(MONTHS[m - 1]).slice(0, 3), income: inc, expenses: outflow, savings: inc - outflow };
   });
 
   // Category bar data
@@ -96,8 +106,10 @@ export default function Statistics() {
 
   // Avg monthly expense
   const monthsWithExpenses = Array.from({ length: 12 }, (_, i) =>
-    allExpenses.filter((e) => new Date(e.date).getMonth() === i && new Date(e.date).getFullYear() === selectedYear)
-      .reduce((a, e) => a + e.amount, 0)
+    allExpenses.filter((e) => {
+      const d = parseDateString(e.date);
+      return d.getMonth() === i && d.getFullYear() === selectedYear;
+    }).reduce((a, e) => a + e.amount, 0)
   ).filter((v) => v > 0);
   const avgMonthly = monthsWithExpenses.length ? monthsWithExpenses.reduce((a, v) => a + v, 0) / monthsWithExpenses.length : 0;
 
@@ -132,11 +144,12 @@ export default function Statistics() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
           { label: 'Total Income', value: formatCurrency(totalIncome), color: 'text-cyan-400' },
           { label: 'Total Expenses', value: formatCurrency(totalExpense), color: 'text-rose-400' },
-          { label: 'Net Savings', value: formatCurrency(Math.max(0, totalIncome - totalExpense)), color: 'text-emerald-400' },
+          { label: 'Card Payments', value: formatCurrency(cardPaymentsTotal), color: 'text-amber-400' },
+          { label: 'Available Balance', value: formatCurrency(totalIncome - cashOutflow), color: totalIncome - cashOutflow >= 0 ? 'text-emerald-400' : 'text-rose-400' },
           { label: 'Avg Monthly Expense', value: formatCurrency(avgMonthly), color: 'text-amber-400' },
         ].map((item) => (
           <Card key={item.label} className="p-4">
@@ -234,7 +247,7 @@ export default function Statistics() {
             <div className={`p-4 rounded-xl ${theme === 'dark' ? 'bg-gray-800/50' : 'bg-gray-50'}`}>
               <p className={`text-xs ${textSecondary} mb-1`}>{t('Savings Rate')}</p>
               <p className={`text-base font-bold ${textPrimary}`}>
-                {totalIncome > 0 ? (((totalIncome - totalExpense) / totalIncome) * 100).toFixed(1) : 0}%
+                {totalIncome > 0 ? (((totalIncome - cashOutflow) / totalIncome) * 100).toFixed(1) : 0}%
               </p>
               <p className={`text-sm ${textSecondary}`}>{t('of income saved')}</p>
             </div>

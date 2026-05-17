@@ -4,13 +4,21 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getSalaries, addSalary, updateSalary, deleteSalary } from '../lib/firestore';
-import { formatCurrency, formatDate, MONTHS, getCurrentMonth, getCurrentYear } from '../lib/utils';
+import { getSalaries, addSalary, updateSalary, deleteSalary, getExpenses, getCardPayments } from '../lib/firestore';
+import {
+  formatCurrency,
+  formatDate,
+  MONTHS,
+  getCurrentMonth,
+  getCurrentYear,
+  getMonthCardPayments,
+  getMonthCashOutflow,
+} from '../lib/utils';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import Input, { Select } from '../components/ui/Input';
-import type { Salary } from '../types';
+import type { CardPayment, Expense, Salary } from '../types';
 
 const emptyForm = {
   amount: '', type: 'salary' as Salary['type'],
@@ -23,6 +31,8 @@ export default function SalaryPage() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const [salaries, setSalaries] = useState<Salary[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -35,8 +45,14 @@ export default function SalaryPage() {
 
   async function load() {
     if (!currentUser) return;
-    const data = await getSalaries(currentUser.uid);
+    const [data, exp, payments] = await Promise.all([
+      getSalaries(currentUser.uid),
+      getExpenses(currentUser.uid),
+      getCardPayments(currentUser.uid),
+    ]);
     setSalaries(data);
+    setExpenses(exp);
+    setCardPayments(payments);
     setLoading(false);
   }
 
@@ -87,6 +103,17 @@ export default function SalaryPage() {
   const curYear = getCurrentYear();
 
   const monthIncome = salaries.filter((s) => s.month === curMonth && s.year === curYear).reduce((a, s) => a + s.amount, 0);
+  const monthSalary = salaries
+    .filter(
+      (s) =>
+        s.month === curMonth &&
+        s.year === curYear &&
+        s.type === 'salary'
+    )
+    .reduce((a, s) => a + s.amount, 0);
+  const monthCardPayments = getMonthCardPayments(cardPayments, curMonth, curYear);
+  const monthCashOutflow = getMonthCashOutflow(expenses, cardPayments, curMonth, curYear);
+  const availableAfterOutflow = monthIncome - monthCashOutflow;
   const prevMonthIncome = salaries.filter((s) => {
     const pm = curMonth === 1 ? 12 : curMonth - 1;
     const py = curMonth === 1 ? curYear - 1 : curYear;
@@ -102,7 +129,8 @@ export default function SalaryPage() {
     const total = salaries.filter((s) => s.month === month && s.year === year).reduce((a, s) => a + s.amount, 0);
     const salary = salaries.filter((s) => s.month === month && s.year === year && s.type === 'salary').reduce((a, s) => a + s.amount, 0);
     const bonuses = total - salary;
-    return { month: t(MONTHS[month - 1]).slice(0, 3), total, salary, bonuses };
+    const outflow = getMonthCashOutflow(expenses, cardPayments, month, year);
+    return { month: t(MONTHS[month - 1]).slice(0, 3), total, salary, bonuses, available: total - outflow };
   });
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div>;
@@ -120,7 +148,21 @@ export default function SalaryPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Card className="p-5">
+          <p className={`text-sm ${textSecondary} mb-1`}>
+            {t('Monthly Salary')}
+          </p>
+
+          <p className="text-2xl font-bold text-cyan-400">
+            {formatCurrency(monthSalary)}
+          </p>
+
+          <div className="flex items-center gap-1 mt-1 text-xs text-cyan-400">
+            <DollarSign className="w-3 h-3" />
+            {t('Base salary only')}
+          </div>
+        </Card>
         <Card className="p-5">
           <p className={`text-sm ${textSecondary} mb-1`}>{t('This Month')}</p>
           <p className={`text-2xl font-bold ${textPrimary}`}>{formatCurrency(monthIncome)}</p>
@@ -132,15 +174,17 @@ export default function SalaryPage() {
           )}
         </Card>
         <Card className="p-5">
-          <p className={`text-sm ${textSecondary} mb-1`}>{t('Base Salary')}</p>
-          <p className={`text-2xl font-bold ${textPrimary}`}>
-            {formatCurrency(salaries.filter((s) => s.month === curMonth && s.year === curYear && s.type === 'salary').reduce((a, s) => a + s.amount, 0))}
-          </p>
+          <p className={`text-sm ${textSecondary} mb-1`}>{t('Card Payments')}</p>
+          <p className="text-2xl font-bold text-amber-400">{formatCurrency(monthCardPayments)}</p>
         </Card>
         <Card className="p-5">
-          <p className={`text-sm ${textSecondary} mb-1`}>{t('Bonuses & Incentives')}</p>
-          <p className={`text-2xl font-bold text-amber-400`}>
-            {formatCurrency(salaries.filter((s) => s.month === curMonth && s.year === curYear && s.type !== 'salary').reduce((a, s) => a + s.amount, 0))}
+          <p className={`text-sm ${textSecondary} mb-1`}>{t('Cash Outflow')}</p>
+          <p className="text-2xl font-bold text-rose-400">{formatCurrency(monthCashOutflow)}</p>
+        </Card>
+        <Card className="p-5">
+          <p className={`text-sm ${textSecondary} mb-1`}>{t('Available Balance')}</p>
+          <p className={`text-2xl font-bold ${availableAfterOutflow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {formatCurrency(availableAfterOutflow)}
           </p>
         </Card>
       </div>
@@ -159,11 +203,13 @@ export default function SalaryPage() {
             />
             <Bar dataKey="salary" name={t('Salary')} fill="#06b6d4" radius={[4, 4, 0, 0]} />
             <Bar dataKey="bonuses" name={t('Bonuses')} fill="#f59e0b" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="available" name={t('Available Balance')} fill="#22c55e" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
         <div className="flex gap-6 mt-2">
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-cyan-400" /><span className={`text-xs ${textSecondary}`}>{t('Salary')}</span></div>
           <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-amber-400" /><span className={`text-xs ${textSecondary}`}>{t('Bonuses')}</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-emerald-400" /><span className={`text-xs ${textSecondary}`}>{t('Available Balance')}</span></div>
         </div>
       </Card>
 

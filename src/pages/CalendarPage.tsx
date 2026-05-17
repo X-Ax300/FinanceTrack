@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
-import { combineExpensesWithCardCharges, formatCurrency, MONTHS } from '../lib/utils';
+import { combineExpensesWithCardCharges, formatCurrency, MONTHS, parseDateString } from '../lib/utils';
 import Card from '../components/ui/Card';
 import type { CardCharge, Expense, Salary, CreditCard as CreditCardType } from '../types';
 
@@ -46,7 +46,7 @@ export default function CalendarPage() {
   const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
   allExpenses.forEach((e) => {
-    const d = new Date(e.date);
+    const d = parseDateString(e.date);
     if (d.getMonth() === month && d.getFullYear() === year) {
       const day = d.getDate();
       if (!eventsByDay[day]) eventsByDay[day] = [];
@@ -56,7 +56,7 @@ export default function CalendarPage() {
 
   salaries.forEach((s) => {
     if (s.month === month + 1 && s.year === year) {
-      const d = new Date(s.date);
+      const d = parseDateString(s.date);
       const day = d.getDate();
       if (!eventsByDay[day]) eventsByDay[day] = [];
       eventsByDay[day].push({ day, type: 'income', label: `${t('Income')}: ${t(s.type)}`, amount: s.amount, color: '#22c55e' });
@@ -209,7 +209,7 @@ export default function CalendarPage() {
               <div>
                 <p className={`text-xs ${textSecondary}`}>{t('Expenses')}</p>
                 <p className="text-base font-bold text-rose-400">
-                  {formatCurrency(allExpenses.filter((e) => { const d = new Date(e.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((a, e) => a + e.amount, 0))}
+                  {formatCurrency(allExpenses.filter((e) => { const d = parseDateString(e.date); return d.getMonth() === month && d.getFullYear() === year; }).reduce((a, e) => a + e.amount, 0))}
                 </p>
               </div>
               <div>

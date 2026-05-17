@@ -15,7 +15,7 @@ import {
   addCardCharge,
   deleteCardCharge,
 } from '../lib/firestore';
-import { formatCurrency, MONTHS, getCurrentMonth, getCurrentYear, CATEGORY_LABELS } from '../lib/utils';
+import { formatCurrency, MONTHS, getCurrentMonth, getCurrentYear, CATEGORY_LABELS, getCardDebt, parseDateString } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -90,7 +90,7 @@ export default function Cards() {
   function getCardMonthCharges(cardId: string) {
     return charges
       .filter((charge) => {
-        const date = new Date(charge.date);
+        const date = parseDateString(charge.date);
         return charge.cardId === cardId && date.getMonth() + 1 === curMonth && date.getFullYear() === curYear;
       })
       .reduce((total, charge) => total + charge.amount, 0);
@@ -234,6 +234,7 @@ export default function Cards() {
           const paid = getCardMonthPayment(card.id!);
           const used = getCardMonthCharges(card.id!);
           const balance = Math.max(0, used - paid);
+          const totalDebt = getCardDebt(charges, payments, card.id);
           const cardPayments = payments.filter((p) => p.cardId === card.id).sort((a, b) => b.date.localeCompare(a.date));
           const cardCharges = charges.filter((charge) => charge.cardId === card.id).sort((a, b) => b.date.localeCompare(a.date));
           const todayN = new Date().getDate();
@@ -243,7 +244,7 @@ export default function Cards() {
             <div key={card.id} className={`rounded-2xl border overflow-hidden ${theme === 'dark' ? 'border-gray-800/60 bg-gray-900/60' : 'border-gray-200 bg-white'} shadow-xl`}>
               {/* Card visual */}
               <div className="relative p-5 text-white" style={{ background: `linear-gradient(135deg, ${card.color}, ${card.color}99)` }}>
-                <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_70%_-20%,white,transparent)]" />
+                <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(circle_at_70%_-20%,white,transparent)]" />
                 <div className="flex items-start justify-between mb-8">
                   <div>
                     <p className="text-sm font-medium opacity-80">{card.bankName}</p>
@@ -283,6 +284,10 @@ export default function Cards() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className={textSecondary}>{t('Pending balance')}</span>
+                  <span className={`font-semibold ${totalDebt > 0 ? 'text-amber-400' : textPrimary}`}>{formatCurrency(totalDebt)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className={textSecondary}>{t('This month balance')}</span>
                   <span className={`font-semibold ${balance > 0 ? 'text-amber-400' : textPrimary}`}>{formatCurrency(balance)}</span>
                 </div>
                 <div className="flex justify-between text-sm">

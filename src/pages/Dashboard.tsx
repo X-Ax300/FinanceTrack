@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   TrendingUp, TrendingDown, Wallet, CreditCard,
-  ArrowUpRight, ArrowDownRight, Target,
+  ArrowUpRight, ArrowDownRight,
   AlertCircle, CheckCircle2,
 } from 'lucide-react';
 import {
@@ -11,18 +11,23 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getExpenses, getSalaries, getCards, getCardCharges, getGoals } from '../lib/firestore';
+import { getExpenses, getSalaries, getCards, getCardCharges, getCardPayments, getGoals } from '../lib/firestore';
 import {
   combineExpensesWithCardCharges,
   formatCurrency,
+  formatDate,
+  getCardDebt,
   getCurrentMonth,
   getCurrentYear,
+  getMonthCardPayments,
+  getMonthCashOutflow,
   MONTHS,
   CATEGORY_COLORS,
   CATEGORY_LABELS,
+  parseDateString,
 } from '../lib/utils';
 import Card from '../components/ui/Card';
-import type { CardCharge, Expense, Salary, CreditCard as CreditCardType, SavingGoal } from '../types';
+import type { CardCharge, CardPayment, Expense, Salary, CreditCard as CreditCardType, SavingGoal } from '../types';
 
 export default function Dashboard() {
   const { currentUser } = useAuth();
@@ -30,6 +35,7 @@ export default function Dashboard() {
   const { t } = useLanguage();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
+  const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [goals, setGoals] = useState<SavingGoal[]>([]);
@@ -45,12 +51,14 @@ export default function Dashboard() {
       getSalaries(currentUser.uid),
       getCards(currentUser.uid),
       getCardCharges(currentUser.uid),
+      getCardPayments(currentUser.uid),
       getGoals(currentUser.uid),
-    ]).then(([exp, sal, crd, charges, gls]) => {
+    ]).then(([exp, sal, crd, charges, payments, gls]) => {
       setExpenses(exp);
       setSalaries(sal);
       setCards(crd);
       setCardCharges(charges);
+      setCardPayments(payments);
       setGoals(gls);
       setLoading(false);
     });
@@ -59,15 +67,8 @@ export default function Dashboard() {
   const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
   const monthExpenses = allExpenses.filter((e) => {
-    const d = new Date(e.date);
+    const d = parseDateString(e.date);
     return d.getMonth() + 1 === curMonth && d.getFullYear() === curYear;
-  });
-
-  const prevMonthExpenses = allExpenses.filter((e) => {
-    const d = new Date(e.date);
-    const pm = curMonth === 1 ? 12 : curMonth - 1;
-    const py = curMonth === 1 ? curYear - 1 : curYear;
-    return d.getMonth() + 1 === pm && d.getFullYear() === py;
   });
 
   const monthIncome = salaries
@@ -82,12 +83,21 @@ export default function Dashboard() {
     })
     .reduce((a, s) => a + s.amount, 0);
 
-  const totalMonthExpense = monthExpenses.reduce((a, e) => a + e.amount, 0);
-  const prevMonthExpenseTotal = prevMonthExpenses.reduce((a, e) => a + e.amount, 0);
-  const balance = monthIncome - totalMonthExpense;
+  const monthCardPayments = getMonthCardPayments(cardPayments, curMonth, curYear);
+  const monthCashOutflow = getMonthCashOutflow(expenses, cardPayments, curMonth, curYear);
+  
+  const totalCardDebt = getCardDebt(cardCharges, cardPayments);
+  
+  const prevCashOutflow = getMonthCashOutflow(
+    expenses,
+    cardPayments,
+    curMonth === 1 ? 12 : curMonth - 1,
+    curMonth === 1 ? curYear - 1 : curYear
+  );
+  const balance = monthIncome - monthCashOutflow;
 
   const incomeChange = prevMonthIncome > 0 ? ((monthIncome - prevMonthIncome) / prevMonthIncome) * 100 : 0;
-  const expenseChange = prevMonthExpenseTotal > 0 ? ((totalMonthExpense - prevMonthExpenseTotal) / prevMonthExpenseTotal) * 100 : 0;
+  const expenseChange = prevCashOutflow > 0 ? ((monthCashOutflow - prevCashOutflow) / prevCashOutflow) * 100 : 0;
 
   // Category breakdown
   const categoryTotals = monthExpenses.reduce((acc, e) => {
@@ -109,13 +119,8 @@ export default function Dashboard() {
     const month = ((curMonth - 1 - (5 - i) + 12) % 12) + 1;
     const year = curMonth - (5 - i) <= 0 ? curYear - 1 : curYear;
     const inc = salaries.filter((s) => s.month === month && s.year === year).reduce((a, s) => a + s.amount, 0);
-    const exp = allExpenses
-      .filter((e) => {
-        const d = new Date(e.date);
-        return d.getMonth() + 1 === month && d.getFullYear() === year;
-      })
-      .reduce((a, e) => a + e.amount, 0);
-    return { month: MONTHS[month - 1].slice(0, 3), income: inc, expenses: exp };
+    const outflow = getMonthCashOutflow(expenses, cardPayments, month, year);
+    return { month: MONTHS[month - 1].slice(0, 3), income: inc, expenses: outflow };
   });
 
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
@@ -156,8 +161,8 @@ export default function Dashboard() {
         />
         <StatCard
           theme={theme}
-          label={t('Monthly Expenses')}
-          value={formatCurrency(totalMonthExpense)}
+          label={t('Cash Outflow')}
+          value={formatCurrency(monthCashOutflow)}
           change={expenseChange}
           invertChange
           icon={<TrendingDown className="w-5 h-5" />}
@@ -174,10 +179,10 @@ export default function Dashboard() {
         />
         <StatCard
           theme={theme}
-          label={t('Active Goals')}
-          value={`${goals.length} ${t('goals')}`}
-          subValue={`${goals.filter(g => g.currentAmount >= g.targetAmount).length} ${t('completed')}`}
-          icon={<Target className="w-5 h-5" />}
+          label={t('Card Debt')}
+          value={formatCurrency(totalCardDebt)}
+          subValue={`${t('Paid this month')}: ${formatCurrency(monthCardPayments)}`}
+          icon={<CreditCard className="w-5 h-5" />}
           gradient="from-amber-500 to-orange-600"
           glowColor="shadow-amber-500/20"
         />
@@ -288,7 +293,7 @@ export default function Dashboard() {
                   <span className="text-lg">{getCategoryIcon(e.category)}</span>
                   <div>
                     <p className={`text-sm font-medium ${textPrimary}`}>{e.name}</p>
-                    <p className={`text-xs ${textSecondary}`}>{new Date(e.date).toLocaleDateString()}</p>
+                    <p className={`text-xs ${textSecondary}`}>{formatDate(e.date)}</p>
                   </div>
                 </div>
                 <span className="text-sm font-semibold text-rose-400">-{formatCurrency(e.amount)}</span>
@@ -319,8 +324,10 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className={`text-xs ${textSecondary}`}>{t('Limit')}</p>
-                  <p className={`text-sm font-semibold ${textPrimary}`}>{formatCurrency(card.limit)}</p>
+                  <p className={`text-xs ${textSecondary}`}>{t('Debt left')}</p>
+                  <p className={`text-sm font-semibold ${getCardDebt(cardCharges, cardPayments, card.id) > 0 ? 'text-amber-400' : textPrimary}`}>
+                    {formatCurrency(getCardDebt(cardCharges, cardPayments, card.id))}
+                  </p>
                 </div>
               </div>
             ))}

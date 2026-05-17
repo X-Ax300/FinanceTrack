@@ -4,11 +4,20 @@ import { FileText, Download, TrendingUp, TrendingDown, BarChart3 } from 'lucide-
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getExpenses, getSalaries, getCards, getCardCharges, getFriends } from '../lib/firestore';
-import { combineExpensesWithCardCharges, formatCurrency, MONTHS, CATEGORY_LABELS, getCurrentYear } from '../lib/utils';
+import { getExpenses, getSalaries, getCards, getCardCharges, getCardPayments, getFriends } from '../lib/firestore';
+import {
+  combineExpensesWithCardCharges,
+  formatCurrency,
+  getMonthCardPayments,
+  getMonthCashOutflow,
+  MONTHS,
+  CATEGORY_LABELS,
+  getCurrentYear,
+  parseDateString,
+} from '../lib/utils';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import type { CardCharge, CreditCard, Expense, Friend, Salary } from '../types';
+import type { CardCharge, CardPayment, CreditCard, Expense, Friend, Salary } from '../types';
 
 export default function Reports() {
   const { currentUser } = useAuth();
@@ -17,6 +26,7 @@ export default function Reports() {
   const [searchParams] = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
+  const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,11 +63,12 @@ export default function Reports() {
           if (active) setSelectedFriend(friend);
         }
 
-        const [exp, sal, crd, charges] = await Promise.all([
+        const [exp, sal, crd, charges, payments] = await Promise.all([
           getExpenses(viewUserId, { forceRefresh: !!friendId }),
           getSalaries(viewUserId, { forceRefresh: !!friendId }),
           getCards(viewUserId, { forceRefresh: !!friendId }),
           getCardCharges(viewUserId, { forceRefresh: !!friendId }),
+          getCardPayments(viewUserId, { forceRefresh: !!friendId }),
         ]);
 
         if (!active) return;
@@ -65,12 +76,14 @@ export default function Reports() {
         setSalaries(sal);
         setCards(crd);
         setCardCharges(charges);
+        setCardPayments(payments);
       } catch (error) {
         if (!active) return;
         setExpenses([]);
         setSalaries([]);
         setCards([]);
         setCardCharges([]);
+        setCardPayments([]);
         setAccessError(error instanceof Error ? error.message : 'Could not load this report.');
       } finally {
         if (active) setLoading(false);
@@ -91,18 +104,31 @@ export default function Reports() {
     const m = i + 1;
     const income = salaries.filter((s) => s.month === m && s.year === selectedYear).reduce((a, s) => a + s.amount, 0);
     const expense = allExpenses.filter((e) => {
-      const d = new Date(e.date);
+      const d = parseDateString(e.date);
       return d.getMonth() + 1 === m && d.getFullYear() === selectedYear;
     }).reduce((a, e) => a + e.amount, 0);
-    return { month: MONTHS[i], m, income, expense, savings: Math.max(0, income - expense), savingsRate: income > 0 ? ((income - expense) / income * 100) : 0 };
+    const cardPaymentsTotal = getMonthCardPayments(cardPayments, m, selectedYear);
+    const cashOutflow = getMonthCashOutflow(expenses, cardPayments, m, selectedYear);
+    return {
+      month: MONTHS[i],
+      m,
+      income,
+      expense,
+      cardPayments: cardPaymentsTotal,
+      cashOutflow,
+      savings: income - cashOutflow,
+      savingsRate: income > 0 ? ((income - cashOutflow) / income * 100) : 0,
+    };
   });
 
   const yearIncome = monthlySummary.reduce((a, m) => a + m.income, 0);
   const yearExpense = monthlySummary.reduce((a, m) => a + m.expense, 0);
-  const yearSavings = yearIncome - yearExpense;
+  const yearCardPayments = monthlySummary.reduce((a, m) => a + m.cardPayments, 0);
+  const yearCashOutflow = monthlySummary.reduce((a, m) => a + m.cashOutflow, 0);
+  const yearSavings = yearIncome - yearCashOutflow;
 
   // Category totals for year
-  const yearExpenses = allExpenses.filter((e) => new Date(e.date).getFullYear() === selectedYear);
+  const yearExpenses = allExpenses.filter((e) => parseDateString(e.date).getFullYear() === selectedYear);
   const catTotals = yearExpenses.reduce((acc, e) => {
     acc[e.category] = (acc[e.category] || 0) + e.amount;
     return acc;
@@ -110,10 +136,18 @@ export default function Reports() {
 
   function exportCSV() {
     const rows = [
-      ['Month', 'Income', 'Expenses', 'Savings', 'Savings Rate'],
-      ...monthlySummary.map((m) => [m.month, m.income.toFixed(2), m.expense.toFixed(2), m.savings.toFixed(2), m.savingsRate.toFixed(1) + '%']),
+      ['Month', 'Income', 'Expenses', 'Card Payments', 'Cash Outflow', 'Available Balance', 'Savings Rate'],
+      ...monthlySummary.map((m) => [
+        m.month,
+        m.income.toFixed(2),
+        m.expense.toFixed(2),
+        m.cardPayments.toFixed(2),
+        m.cashOutflow.toFixed(2),
+        m.savings.toFixed(2),
+        m.savingsRate.toFixed(1) + '%',
+      ]),
       [],
-      ['TOTAL', yearIncome.toFixed(2), yearExpense.toFixed(2), yearSavings.toFixed(2)],
+      ['TOTAL', yearIncome.toFixed(2), yearExpense.toFixed(2), yearCardPayments.toFixed(2), yearCashOutflow.toFixed(2), yearSavings.toFixed(2)],
     ];
     const csv = rows.map((r) => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -128,7 +162,13 @@ export default function Reports() {
   function exportJSON() {
     const data = {
       year: selectedYear,
-      summary: { totalIncome: yearIncome, totalExpenses: yearExpense, totalSavings: yearSavings },
+      summary: {
+        totalIncome: yearIncome,
+        totalExpenses: yearExpense,
+        totalCardPayments: yearCardPayments,
+        totalCashOutflow: yearCashOutflow,
+        availableBalance: yearSavings,
+      },
       monthly: monthlySummary,
       categoryBreakdown: catTotals,
     };
@@ -179,7 +219,7 @@ export default function Reports() {
       )}
 
       {/* Year summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <Card className="p-5">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-9 h-9 rounded-xl bg-cyan-500/20 flex items-center justify-center">
@@ -200,10 +240,19 @@ export default function Reports() {
         </Card>
         <Card className="p-5">
           <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center">
+              <TrendingDown className="w-5 h-5 text-amber-400" />
+            </div>
+            <p className={`text-sm ${textSecondary}`}>{t('Card Payments')} {selectedYear}</p>
+          </div>
+          <p className="text-2xl font-bold text-amber-400">{formatCurrency(yearCardPayments)}</p>
+        </Card>
+        <Card className="p-5">
+          <div className="flex items-center gap-3 mb-2">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center">
               <BarChart3 className="w-5 h-5 text-emerald-400" />
             </div>
-            <p className={`text-sm ${textSecondary}`}>{t('Net Savings')} {selectedYear}</p>
+            <p className={`text-sm ${textSecondary}`}>{t('Available Balance')} {selectedYear}</p>
           </div>
           <p className={`text-2xl font-bold ${yearSavings >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(yearSavings)}</p>
         </Card>
@@ -219,7 +268,7 @@ export default function Reports() {
           <table className="w-full">
             <thead>
               <tr className={`border-b ${theme === 'dark' ? 'border-gray-800' : 'border-gray-100'}`}>
-                {['Month', 'Income', 'Expenses', 'Savings', 'Savings Rate', 'Status'].map((h) => (
+                {['Month', 'Income', 'Expenses', 'Card Payments', 'Available Balance', 'Savings Rate', 'Status'].map((h) => (
                   <th key={h} className={`px-5 py-3 text-left text-xs font-medium ${textSecondary} uppercase tracking-wider`}>{t(h)}</th>
                 ))}
               </tr>
@@ -232,6 +281,7 @@ export default function Reports() {
                     <td className={`px-5 py-3 text-sm font-medium ${textPrimary}`}>{t(row.month)}</td>
                     <td className="px-5 py-3 text-sm text-cyan-400 font-medium">{formatCurrency(row.income)}</td>
                     <td className="px-5 py-3 text-sm text-rose-400 font-medium">{formatCurrency(row.expense)}</td>
+                    <td className="px-5 py-3 text-sm text-amber-400 font-medium">{formatCurrency(row.cardPayments)}</td>
                     <td className={`px-5 py-3 text-sm font-medium ${row.savings >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {formatCurrency(row.savings)}
                     </td>
@@ -239,7 +289,7 @@ export default function Reports() {
                       {row.income > 0 ? (
                         <div className="flex items-center gap-2">
                           <div className={`w-16 h-1.5 rounded-full ${theme === 'dark' ? 'bg-gray-800' : 'bg-gray-200'}`}>
-                            <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${Math.min(100, row.savingsRate)}%` }} />
+                            <div className="h-full rounded-full bg-emerald-400 transition-all" style={{ width: `${Math.max(0, Math.min(100, row.savingsRate))}%` }} />
                           </div>
                           <span className={`text-xs ${textSecondary}`}>{row.savingsRate.toFixed(1)}%</span>
                         </div>
