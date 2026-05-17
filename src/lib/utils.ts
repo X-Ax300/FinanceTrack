@@ -1,9 +1,10 @@
 import type { CardCharge, CardPayment, CreditCard, Expense, ExpenseCategory } from '../types';
 
 export const CURRENCIES = ['USD', 'DOP', 'EUR', 'GBP', 'MXN', 'CAD', 'ARS', 'COP', 'BRL', 'JPY'];
+export const CURRENCY_STORAGE_KEY = 'ft-currency';
 
 export function getStoredCurrency(): string {
-  return localStorage.getItem('ft-currency') || 'USD';
+  return localStorage.getItem(CURRENCY_STORAGE_KEY) || 'USD';
 }
 
 export function formatCurrency(amount: number, currency = getStoredCurrency()): string {

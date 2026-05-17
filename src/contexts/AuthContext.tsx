@@ -12,7 +12,9 @@ import {
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { processSyncQueue, setupSyncListener } from '../lib/cacheSync';
-import { prefetchUserData, upsertUserProfile } from '../lib/firestore';
+import { getUserProfile, prefetchUserData, upsertUserProfile } from '../lib/firestore';
+import { CURRENCY_STORAGE_KEY } from '../lib/utils';
+import { LANGUAGE_CHANGED_EVENT, LANGUAGE_STORAGE_KEY } from './LanguageContext';
 
 interface AuthContextType {
   currentUser: FirebaseUser | null;
@@ -71,7 +73,18 @@ export function AuthProvider({ children }: { readonly children: ReactNode }) {
           email: user.email,
           displayName: user.displayName,
           photoURL: user.photoURL,
-        }).catch((error) => console.error('Profile sync failed:', error));
+        })
+          .then(async () => {
+            const profile = await getUserProfile(user.uid);
+            if (profile?.language === 'en' || profile?.language === 'es') {
+              localStorage.setItem(LANGUAGE_STORAGE_KEY, profile.language);
+              window.dispatchEvent(new CustomEvent(LANGUAGE_CHANGED_EVENT, { detail: profile.language }));
+            }
+            if (profile?.currency) {
+              localStorage.setItem(CURRENCY_STORAGE_KEY, profile.currency);
+            }
+          })
+          .catch((error) => console.error('Profile sync failed:', error));
 
         unsubscribeSyncRef.current = setupSyncListener(user.uid);
         

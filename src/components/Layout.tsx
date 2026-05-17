@@ -125,7 +125,15 @@ export default function Layout({ children }: LayoutProps) {
         <div className="px-4 py-4 border-b border-gray-800/40">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm shadow-lg">
-              {currentUser?.displayName?.[0]?.toUpperCase() || currentUser?.email?.[0]?.toUpperCase() || 'U'}
+              {currentUser?.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt={currentUser.displayName || currentUser.email || 'Profile'}
+                  className="h-full w-full rounded-full object-cover"
+                />
+              ) : (
+                currentUser?.displayName?.[0]?.toUpperCase() || currentUser?.email?.[0]?.toUpperCase() || 'U'
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className={`text-sm font-semibold truncate ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>

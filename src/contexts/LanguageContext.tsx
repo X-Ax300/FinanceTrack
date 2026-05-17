@@ -9,6 +9,8 @@ interface LanguageContextType {
 }
 
 const STORAGE_KEY = 'ft-language';
+export const LANGUAGE_STORAGE_KEY = STORAGE_KEY;
+export const LANGUAGE_CHANGED_EVENT = 'ft-language-changed';
 
 const translations: Record<Language, Record<string, string>> = {
   en: {},
@@ -101,6 +103,9 @@ const translations: Record<Language, Record<string, string>> = {
     Preferences: 'Preferencias',
     Profile: 'Perfil',
     'Profile updated successfully.': 'Perfil actualizado correctamente.',
+    'Profile Photo URL': 'URL de foto de perfil',
+    'Use an image URL. FinanceTrack will not upload or store image files.': 'Usa una URL de imagen. FinanceTrack no subira ni guardara archivos de imagen.',
+    'Enter a valid image URL.': 'Ingresa una URL de imagen valida.',
     'Recent Expenses': 'Gastos recientes',
     Remove: 'Eliminar',
     'Remove Friend': 'Eliminar amigo',
@@ -137,7 +142,7 @@ const translations: Record<Language, Record<string, string>> = {
     'Are you sure you want to delete this expense? This action cannot be undone.': 'Seguro que quieres eliminar este gasto? Esta accion no se puede deshacer.',
     'Coffee, Groceries...': 'Cafe, compras...',
     Clear: 'Limpiar',
-    records: 'registros',
+    records: 'gastos',
     Food: 'Comida',
     Transport: 'Transporte',
     Streaming: 'Streaming',
@@ -387,11 +392,29 @@ export function LanguageProvider({ children }: { readonly children: ReactNode })
   function setLanguage(nextLanguage: Language) {
     setLanguageState(nextLanguage);
     localStorage.setItem(STORAGE_KEY, nextLanguage);
+    window.dispatchEvent(new CustomEvent<Language>(LANGUAGE_CHANGED_EVENT, { detail: nextLanguage }));
   }
 
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    function handleLanguageChange(event: Event) {
+      const nextLanguage =
+        event instanceof CustomEvent ? event.detail : localStorage.getItem(STORAGE_KEY);
+      if (nextLanguage === 'es' || nextLanguage === 'en') {
+        setLanguageState(nextLanguage);
+      }
+    }
+
+    window.addEventListener(LANGUAGE_CHANGED_EVENT, handleLanguageChange);
+    window.addEventListener('storage', handleLanguageChange);
+    return () => {
+      window.removeEventListener(LANGUAGE_CHANGED_EVENT, handleLanguageChange);
+      window.removeEventListener('storage', handleLanguageChange);
+    };
+  }, []);
 
   const value = useMemo(
     () => ({

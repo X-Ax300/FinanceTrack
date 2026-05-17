@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { User, Shield, Palette, LogOut, Save, Eye, EyeOff, Languages, Bell } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { User, Shield, Palette, LogOut, Save, Eye, EyeOff, Languages, Bell, Camera } from 'lucide-react';
 import { updateProfile, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Language, useLanguage } from '../contexts/LanguageContext';
-import { CURRENCIES, getStoredCurrency } from '../lib/utils';
+import { CURRENCIES, CURRENCY_STORAGE_KEY, getStoredCurrency } from '../lib/utils';
+import { getUserProfile, updateUserProfile } from '../lib/firestore';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -15,6 +16,7 @@ export default function Settings() {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
+  const [photoURL, setPhotoURL] = useState(currentUser?.photoURL || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showCurrent, setShowCurrent] = useState(false);
@@ -28,12 +30,54 @@ export default function Settings() {
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
 
+  useEffect(() => {
+    if (!currentUser) return;
+
+    setDisplayName(currentUser.displayName || '');
+    setPhotoURL(currentUser.photoURL || '');
+
+    getUserProfile(currentUser.uid)
+      .then((profile) => {
+        if (!profile) return;
+        setDisplayName(profile.displayName || currentUser.displayName || '');
+        setPhotoURL(profile.photoURL || currentUser.photoURL || '');
+        if (profile.currency) {
+          setCurrency(profile.currency);
+          localStorage.setItem(CURRENCY_STORAGE_KEY, profile.currency);
+        }
+        if (profile.language === 'en' || profile.language === 'es') {
+          setLanguage(profile.language);
+        }
+      })
+      .catch((error) => console.error('Failed to load user preferences:', error));
+  }, [currentUser, setLanguage]);
+
+  function isValidProfilePhotoUrl(value: string) {
+    if (!value.trim()) return true;
+    try {
+      const url = new URL(value.trim());
+      return url.protocol === 'https:' || url.protocol === 'http:';
+    } catch {
+      return false;
+    }
+  }
+
   async function handleSaveProfile() {
     if (!currentUser || !displayName.trim()) return;
+    if (!isValidProfilePhotoUrl(photoURL)) {
+      setProfileMsg(t('Enter a valid image URL.'));
+      return;
+    }
+
     setSavingProfile(true);
     setProfileMsg('');
     try {
-      await updateProfile(currentUser, { displayName });
+      const cleanPhotoURL = photoURL.trim() || null;
+      await updateProfile(currentUser, { displayName: displayName.trim(), photoURL: cleanPhotoURL });
+      await updateUserProfile(currentUser.uid, {
+        displayName: displayName.trim(),
+        photoURL: cleanPhotoURL,
+      });
       setProfileMsg(t('Profile updated successfully.'));
     } catch {
       setProfileMsg(t('Failed to update profile.'));
@@ -59,9 +103,27 @@ export default function Settings() {
     setSavingPassword(false);
   }
 
-  function handleCurrencyChange(val: string) {
+  async function handleCurrencyChange(val: string) {
     setCurrency(val);
-    localStorage.setItem('ft-currency', val);
+    localStorage.setItem(CURRENCY_STORAGE_KEY, val);
+    if (currentUser) {
+      try {
+        await updateUserProfile(currentUser.uid, { currency: val });
+      } catch (error) {
+        console.error('Failed to save currency:', error);
+      }
+    }
+  }
+
+  async function handleLanguageChange(val: Language) {
+    setLanguage(val);
+    if (currentUser) {
+      try {
+        await updateUserProfile(currentUser.uid, { language: val });
+      } catch (error) {
+        console.error('Failed to save language:', error);
+      }
+    }
   }
 
   return (
@@ -81,8 +143,12 @@ export default function Settings() {
         </div>
 
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-            {displayName[0]?.toUpperCase() || currentUser?.email?.[0]?.toUpperCase() || 'U'}
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg overflow-hidden">
+            {photoURL ? (
+              <img src={photoURL} alt={displayName || currentUser?.email || 'Profile'} className="h-full w-full object-cover" />
+            ) : (
+              displayName[0]?.toUpperCase() || currentUser?.email?.[0]?.toUpperCase() || 'U'
+            )}
           </div>
           <div>
             <p className={`font-semibold ${textPrimary}`}>{displayName || t('No name set')}</p>
@@ -97,6 +163,17 @@ export default function Settings() {
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder={t('Your name')}
           />
+          <Input
+            label={t('Profile Photo URL')}
+            type="url"
+            value={photoURL}
+            onChange={(e) => setPhotoURL(e.target.value)}
+            placeholder="https://example.com/photo.jpg"
+          />
+          <p className={`flex items-start gap-2 text-xs ${textSecondary}`}>
+            <Camera className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            {t('Use an image URL. FinanceTrack will not upload or store image files.')}
+          </p>
           <Input label={t('Email')} value={currentUser?.email || ''} disabled className="opacity-60 cursor-not-allowed" />
           {profileMsg && (
             <p className={`text-sm ${profileMsg.includes('success') ? 'text-emerald-400' : 'text-rose-400'}`}>{profileMsg}</p>
@@ -197,7 +274,7 @@ export default function Settings() {
               <Languages className={`w-4 h-4 ${textSecondary}`} />
               <select
                 value={language}
-                onChange={(e) => setLanguage(e.target.value as Language)}
+                onChange={(e) => handleLanguageChange(e.target.value as Language)}
                 className={`px-3 py-1.5 rounded-xl text-sm border outline-none ${theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
               >
                 <option value="en">{t('English')}</option>

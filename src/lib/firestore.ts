@@ -199,12 +199,14 @@ async function deleteCardChargesForCard(cardId: string, userId: string) {
 // USER PROFILES
 // ============================================================================
 
-interface UserProfile {
+export interface UserProfile {
   uid: string;
   email: string | null;
   emailLower: string;
   displayName: string | null;
   photoURL?: string | null;
+  language?: 'en' | 'es';
+  currency?: string;
   createdAt?: string;
   updatedAt: string;
 }
@@ -230,6 +232,20 @@ export async function upsertUserProfile(profile: {
     } satisfies UserProfile,
     { merge: true }
   );
+}
+
+export async function getUserProfile(userId: string): Promise<UserProfile | null> {
+  const userRef = doc(db, COLLECTIONS.users, userId);
+  const snap = await getDoc(userRef);
+  return snap.exists() ? ({ uid: snap.id, ...snap.data() } as UserProfile) : null;
+}
+
+export async function updateUserProfile(
+  userId: string,
+  data: Partial<Pick<UserProfile, 'displayName' | 'photoURL' | 'language' | 'currency'>>
+) {
+  const userRef = doc(db, COLLECTIONS.users, userId);
+  await setDoc(userRef, { ...data, updatedAt: now() }, { merge: true });
 }
 
 async function getUserProfileByEmail(email: string): Promise<UserProfile | null> {
