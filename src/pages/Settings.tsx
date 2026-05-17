@@ -171,16 +171,19 @@ export default function Settings() {
 
         <div className="space-y-4">
           {/* Theme toggle */}
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
               <p className={`text-sm font-medium ${textPrimary}`}>{t('Theme')}</p>
               <p className={`text-xs ${textSecondary}`}>{t('Choose your preferred appearance')}</p>
             </div>
             <button
+              type="button"
               onClick={toggleTheme}
-              className={`relative w-12 h-6 rounded-full transition-colors ${theme === 'dark' ? 'bg-cyan-500' : 'bg-gray-300'}`}
+              aria-label={t('Theme')}
+              aria-pressed={theme === 'dark'}
+              className={`relative h-6 w-12 flex-shrink-0 rounded-full transition-colors ${theme === 'dark' ? 'bg-cyan-500' : 'bg-gray-300'}`}
             >
-              <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              <span className={`absolute left-0.5 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`} />
             </button>
           </div>
 
