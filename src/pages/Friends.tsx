@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { UserPlus, Trash2, Users, Mail, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { UserPlus, Trash2, Users, Mail, CheckCircle, Clock, XCircle, FileText } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -16,6 +17,7 @@ export default function Friends() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const { notifySuccess, notifyError } = useNotifications();
+  const navigate = useNavigate();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -178,8 +180,13 @@ export default function Friends() {
                   </div>
                 </div>
                 <div className={`mt-3 pt-3 border-t text-xs ${theme === 'dark' ? 'border-gray-800 text-gray-500' : 'border-gray-100 text-gray-400'}`}>
-                  <CheckCircle className="w-3 h-3 inline mr-1 text-emerald-400" />
-                  {t('View-only access granted')}
+                  <div className="mb-3">
+                    <CheckCircle className="w-3 h-3 inline mr-1 text-emerald-400" />
+                    {t('View-only access granted')}
+                  </div>
+                  <Button size="sm" variant="secondary" className="w-full" onClick={() => navigate(`/reports?friend=${f.friendId}`)}>
+                    <FileText className="w-3.5 h-3.5" /> {t('View summary')}
+                  </Button>
                 </div>
               </Card>
             ))}

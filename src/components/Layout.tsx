@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, CreditCard, DollarSign, BarChart3, Target,
@@ -9,7 +9,9 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../hooks/useNotifications';
+import { subscribeFriends } from '../lib/firestore';
 import AppVersionStatus from './AppVersionStatus';
+import type { Friend } from '../types';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
@@ -36,6 +38,30 @@ export default function Layout({ children }: LayoutProps) {
   const { canNotify, isGranted, permission, requestPermission, notifySuccess } = useNotifications();
   const navigate = useNavigate();
   const [requestingNotifications, setRequestingNotifications] = useState(false);
+  const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
+  const previousPendingRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!currentUser) {
+      setPendingFriendRequests(0);
+      previousPendingRef.current = null;
+      return;
+    }
+
+    return subscribeFriends(
+      currentUser.uid,
+      (friends: Friend[]) => {
+        const pending = friends.filter((f) => f.status === 'pending' && f.direction === 'incoming').length;
+        setPendingFriendRequests(pending);
+
+        if (previousPendingRef.current !== null && pending > previousPendingRef.current) {
+          notifySuccess(t('New friend request'), t('Open Friends to accept or reject it.'));
+        }
+        previousPendingRef.current = pending;
+      },
+      (error) => console.error('Friend listener failed:', error)
+    );
+  }, [currentUser, notifySuccess, t]);
 
   async function handleLogout() {
     await logout();
@@ -110,33 +136,40 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map(({ to, icon: Icon, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === '/'}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group
-                ${isActive
-                  ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10'
-                  : theme === 'dark'
-                    ? 'text-gray-400 hover:text-white hover:bg-gray-800/60'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                }`
-              }
-              onClick={() => setSidebarOpen(false)}
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon className={`w-4.5 h-4.5 w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-cyan-400' : ''}`} />
-                  {t(label)}
-                  {isActive && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/80" />
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {navItems.map(({ to, icon: Icon, label }) => {
+            const badge = label === 'Friends' ? pendingFriendRequests : 0;
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group
+                  ${isActive
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10'
+                    : theme === 'dark'
+                      ? 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                  }`
+                }
+                onClick={() => setSidebarOpen(false)}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`w-4.5 h-4.5 w-5 h-5 flex-shrink-0 transition-colors ${isActive ? 'text-cyan-400' : ''}`} />
+                    {t(label)}
+                    {badge > 0 ? (
+                      <span className="ml-auto min-w-5 rounded-full bg-rose-500 px-1.5 py-0.5 text-center text-[10px] font-semibold leading-4 text-white">
+                        {badge}
+                      </span>
+                    ) : isActive ? (
+                      <span className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/80" />
+                    ) : null}
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         {/* Bottom actions */}

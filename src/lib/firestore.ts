@@ -9,6 +9,8 @@ import {
   query,
   where,
   setDoc,
+  onSnapshot,
+  Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { getCache, removeCachedItem, setCache } from './cache';
@@ -578,6 +580,23 @@ export async function getFriends(userId: string, options?: GetOptions): Promise<
   return getCachedCollection('friends', userId, async () => {
     return getUserScopedDocs<Friend>(userId, COLLECTIONS.friends, [COLLECTIONS.friends], sortByCreatedAtDesc);
   }, options);
+}
+
+export function subscribeFriends(userId: string, callback: (friends: Friend[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS.friends);
+  return onSnapshot(
+    collection(db, userPath),
+    (snap) => {
+      const friends = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Friend))
+        .sort(sortByCreatedAtDesc);
+      setCache('friends', friends, userId);
+      callback(friends);
+    },
+    (error) => {
+      onError?.(error);
+    }
+  );
 }
 
 export async function deleteFriend(id: string, userId: string) {

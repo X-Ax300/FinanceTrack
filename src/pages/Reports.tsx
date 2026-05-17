@@ -1,33 +1,88 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { FileText, Download, TrendingUp, TrendingDown, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getExpenses, getSalaries, getCards, getCardCharges } from '../lib/firestore';
+import { getExpenses, getSalaries, getCards, getCardCharges, getFriends } from '../lib/firestore';
 import { combineExpensesWithCardCharges, formatCurrency, MONTHS, CATEGORY_LABELS, getCurrentYear } from '../lib/utils';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import type { CardCharge, CreditCard, Expense, Salary } from '../types';
+import type { CardCharge, CreditCard, Expense, Friend, Salary } from '../types';
 
 export default function Reports() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const [searchParams] = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardCharges, setCardCharges] = useState<CardCharge[]>([]);
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(getCurrentYear());
+  const [selectedFriend, setSelectedFriend] = useState<Friend | null>(null);
+  const [accessError, setAccessError] = useState('');
 
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
 
   useEffect(() => {
     if (!currentUser) return;
-    Promise.all([getExpenses(currentUser.uid), getSalaries(currentUser.uid), getCards(currentUser.uid), getCardCharges(currentUser.uid)])
-      .then(([exp, sal, crd, charges]) => { setExpenses(exp); setSalaries(sal); setCards(crd); setCardCharges(charges); setLoading(false); });
-  }, [currentUser]);
+
+    let active = true;
+    const friendId = searchParams.get('friend');
+
+    async function loadReports() {
+      setLoading(true);
+      setAccessError('');
+      setSelectedFriend(null);
+
+      try {
+        let viewUserId = currentUser.uid;
+
+        if (friendId) {
+          const friends = await getFriends(currentUser.uid, { forceRefresh: true });
+          const friend = friends.find((f) => f.friendId === friendId && f.status === 'accepted');
+
+          if (!friend) {
+            throw new Error('You do not have access to this shared report.');
+          }
+
+          viewUserId = friend.friendId;
+          if (active) setSelectedFriend(friend);
+        }
+
+        const [exp, sal, crd, charges] = await Promise.all([
+          getExpenses(viewUserId, { forceRefresh: !!friendId }),
+          getSalaries(viewUserId, { forceRefresh: !!friendId }),
+          getCards(viewUserId, { forceRefresh: !!friendId }),
+          getCardCharges(viewUserId, { forceRefresh: !!friendId }),
+        ]);
+
+        if (!active) return;
+        setExpenses(exp);
+        setSalaries(sal);
+        setCards(crd);
+        setCardCharges(charges);
+      } catch (error) {
+        if (!active) return;
+        setExpenses([]);
+        setSalaries([]);
+        setCards([]);
+        setCardCharges([]);
+        setAccessError(error instanceof Error ? error.message : 'Could not load this report.');
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    loadReports();
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser, searchParams]);
 
   const allExpenses = combineExpensesWithCardCharges(expenses, cardCharges, cards);
 
@@ -93,7 +148,11 @@ export default function Reports() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className={`text-2xl font-bold ${textPrimary}`}>{t('Reports')}</h1>
-          <p className={`text-sm mt-1 ${textSecondary}`}>{t('Annual financial reports and exports')}</p>
+          <p className={`text-sm mt-1 ${textSecondary}`}>
+            {selectedFriend
+              ? `${t('Shared report from')} ${selectedFriend.friendName || selectedFriend.friendEmail}`
+              : t('Annual financial reports and exports')}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -111,6 +170,13 @@ export default function Reports() {
           </Button>
         </div>
       </div>
+
+      {accessError && (
+        <Card className="p-5 border-rose-500/20 bg-rose-500/5">
+          <p className="text-sm font-medium text-rose-400">{t(accessError)}</p>
+          <p className={`mt-1 text-xs ${textSecondary}`}>{t('Ask your friend to send or accept the invitation first.')}</p>
+        </Card>
+      )}
 
       {/* Year summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
