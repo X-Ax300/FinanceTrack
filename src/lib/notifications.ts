@@ -84,7 +84,7 @@ export function sendNotification(options: NotificationOptions): Notification | n
 
     // Auto cerrar después de 5 segundos si no se requiere interacción
     if (!options.requireInteraction) {
-      setTimeout(() => notification.close(), 5000);
+      setTimeout(() => notification.close(), 3000);
     }
 
     return notification;

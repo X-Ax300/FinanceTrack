@@ -117,11 +117,13 @@ export interface Friend {
 export interface Notification {
   id?: string;
   userId: string;
-  type: 'payment' | 'alert' | 'achievement';
+  type: 'payment' | 'alert' | 'achievement' | 'friend' | 'success' | 'info' | 'warning';
   title: string;
   message: string;
   read: boolean;
   createdAt: string;
+  expiresAt?: string;
+  actionUrl?: string;
 }
 
 export interface Achievement {

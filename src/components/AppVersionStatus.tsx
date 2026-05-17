@@ -1,35 +1,39 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 import { Bell, CheckCircle, CreditCard, DollarSign, Sparkles, Users, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../hooks/useNotifications';
-import { APP_VERSION, getUserScopedKey } from '../lib/version';
+import { APP_RELEASE_NOTES, APP_VERSION, getUserScopedKey } from '../lib/version';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 
 const LAST_SEEN_VERSION_KEY = 'ft-last-seen-version';
 const ONBOARDING_KEY = 'ft-onboarding-seen';
+const VERSION_NOTIFICATION_KEY = 'ft-version-notified';
 
 export default function AppVersionStatus() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
-  const { isGranted, notifyInfo } = useNotifications();
+  const { notifyInfo } = useNotifications();
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showUpdateNotice, setShowUpdateNotice] = useState(false);
   const [previousVersion, setPreviousVersion] = useState<string | null>(null);
+  const notifiedVersionsRef = useRef(new Set<string>());
 
   const textPrimary = theme === 'dark' ? 'text-white' : 'text-gray-900';
   const textSecondary = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
   const userId = currentUser?.uid || null;
+  const releaseNotes = useMemo(() => APP_RELEASE_NOTES[APP_VERSION] || [], []);
 
   useEffect(() => {
     if (!userId) return;
 
     const onboardingKey = getUserScopedKey(ONBOARDING_KEY, userId);
     const versionKey = getUserScopedKey(LAST_SEEN_VERSION_KEY, userId);
+    const notifiedKey = getUserScopedKey(`${VERSION_NOTIFICATION_KEY}-${APP_VERSION}`, userId);
     const hasSeenOnboarding = localStorage.getItem(onboardingKey) === 'true';
     const storedVersion = localStorage.getItem(versionKey);
 
@@ -41,15 +45,24 @@ export default function AppVersionStatus() {
       setPreviousVersion(storedVersion);
       setShowUpdateNotice(true);
 
-      if (isGranted) {
-        notifyInfo(t('New version installed'), `${t('New version installed')}: v${APP_VERSION}`);
+      const notificationKey = `${userId}_${APP_VERSION}`;
+      if (!notifiedVersionsRef.current.has(notificationKey)) {
+        notifiedVersionsRef.current.add(notificationKey);
+        if (localStorage.getItem(notifiedKey) !== 'true') {
+          localStorage.setItem(notifiedKey, 'true');
+          notifyInfo(
+            t('New version installed'),
+            `${t('You moved from')} v${storedVersion} ${t('to')} v${APP_VERSION}.`,
+            '/'
+          );
+        }
       }
     }
 
     if (!storedVersion) {
       localStorage.setItem(versionKey, APP_VERSION);
     }
-  }, [isGranted, notifyInfo, userId]);
+  }, [notifyInfo, t, userId]);
 
   function closeOnboarding() {
     if (userId) {
@@ -95,6 +108,16 @@ export default function AppVersionStatus() {
                 <p className={`mt-1 text-xs ${textSecondary}`}>
                   {t('You moved from')} v{previousVersion} {t('to')} v{APP_VERSION}. {t('You already have the latest improvements.')}
                 </p>
+                {releaseNotes.length > 0 && (
+                  <ul className={`mt-3 space-y-1.5 text-xs ${textSecondary}`}>
+                    {releaseNotes.map((note) => (
+                      <li key={note} className="flex gap-2">
+                        <CheckCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
+                        <span>{t(note)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
               <button
                 onClick={closeUpdateNotice}

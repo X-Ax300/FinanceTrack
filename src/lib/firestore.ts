@@ -13,7 +13,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { getCache, removeCachedItem, setCache } from './cache';
+import { getCache, getCacheEntry, removeCachedItem, setCache } from './cache';
 import type { Expense, Salary, CreditCard, CardPayment, CardCharge, SavingGoal, Friend } from '../types';
 
 const now = () => new Date().toISOString();
@@ -46,10 +46,13 @@ const LEGACY_COLLECTIONS = {
 
 interface GetOptions {
   forceRefresh?: boolean;
+  maxAgeMs?: number;
+  refreshOnReload?: boolean;
 }
 
 const inFlightReads = new Map<string, Promise<unknown>>();
 const writeVersions = new Map<string, number>();
+const DEFAULT_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
 
 /**
  * Obtiene la ruta de colección para un usuario específico
@@ -78,6 +81,20 @@ function markCollectionChanged(collectionName: string, userId?: string) {
   writeVersions.set(key, (writeVersions.get(key) || 0) + 1);
 }
 
+function isBrowserReload(): boolean {
+  if (typeof performance === 'undefined' || typeof window === 'undefined') return false;
+  const [navigation] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+  return navigation?.type === 'reload';
+}
+
+function shouldUseCachedCollection(timestamp: number, options: GetOptions): boolean {
+  if (options.forceRefresh) return false;
+  if (options.refreshOnReload !== false && isBrowserReload()) return false;
+
+  const maxAgeMs = options.maxAgeMs ?? DEFAULT_CACHE_MAX_AGE_MS;
+  return Date.now() - timestamp <= maxAgeMs;
+}
+
 async function getCachedCollection<T>(
   collectionName: string,
   userId: string,
@@ -85,8 +102,10 @@ async function getCachedCollection<T>(
   options: GetOptions = {}
 ): Promise<T> {
   if (!options.forceRefresh) {
-    const cached = getCache<T>(collectionName, userId);
-    if (cached && (!Array.isArray(cached) || cached.length > 0)) return cached;
+    const cached = getCacheEntry<T>(collectionName, userId);
+    if (cached && shouldUseCachedCollection(cached.timestamp, options)) {
+      return cached.data;
+    }
   }
 
   const key = readKey(collectionName, userId);
@@ -686,15 +705,145 @@ export async function getGoals(userId: string, options?: GetOptions): Promise<Sa
 
 export function prefetchUserData(userId: string): Promise<unknown[]> {
   if (!navigator.onLine) return Promise.resolve([]);
+  const backgroundOptions: GetOptions = { refreshOnReload: false };
 
   // Load only critical data first
   return Promise.allSettled([
-    getExpenses(userId),
-    getSalaries(userId),
-    getCreditCards(userId),
-    getCardPayments(userId),
-    getCardCharges(userId),
-    getSavingGoals(userId),
-    getFriends(userId),
+    getExpenses(userId, backgroundOptions),
+    getSalaries(userId, backgroundOptions),
+    getCreditCards(userId, backgroundOptions),
+    getCardPayments(userId, backgroundOptions),
+    getCardCharges(userId, backgroundOptions),
+    getSavingGoals(userId, backgroundOptions),
+    getFriends(userId, backgroundOptions),
   ]);
+}
+
+// ============================================================================
+// NOTIFICATIONS HISTORY
+// ============================================================================
+
+const COLLECTIONS_WITH_HISTORY = {
+  notifications: 'notifications',
+} as const;
+
+export async function addNotification(data: Omit<import('../types').Notification, 'id'>) {
+  const userPath = getUserCollectionPath(data.userId, COLLECTIONS_WITH_HISTORY.notifications);
+  const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+  const notificationDoc = await addDoc(collection(db, userPath), {
+    ...data,
+    expiresAt,
+    createdAt: now(),
+  });
+  return notificationDoc;
+}
+
+export async function getNotifications(userId: string, options?: GetOptions): Promise<import('../types').Notification[]> {
+  return getCachedCollection('notifications', userId, async () => {
+    const userPath = getUserCollectionPath(userId, COLLECTIONS_WITH_HISTORY.notifications);
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const q = query(collection(db, userPath), where('createdAt', '>=', threeDaysAgo));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as import('../types').Notification))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, options);
+}
+
+export async function markNotificationAsRead(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS_WITH_HISTORY.notifications);
+  await updateDoc(doc(db, userPath, id), { read: true });
+  markCollectionChanged('notifications', userId);
+}
+
+export async function deleteNotification(id: string, userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS_WITH_HISTORY.notifications);
+  await deleteDoc(doc(db, userPath, id));
+  markCollectionChanged('notifications', userId);
+}
+
+export async function deleteExpiredNotifications(userId: string) {
+  const userPath = getUserCollectionPath(userId, COLLECTIONS_WITH_HISTORY.notifications);
+  const now_time = new Date().toISOString();
+  const q = query(collection(db, userPath), where('expiresAt', '<', now_time));
+  const snap = await getDocs(q);
+  await Promise.allSettled(snap.docs.map((d) => deleteDoc(doc(db, userPath, d.id))));
+}
+
+// Get goals from a friend (for viewing their shared goals)
+export async function getFriendGoals(friendId: string): Promise<SavingGoal[]> {
+  try {
+    const userPath = getUserCollectionPath(friendId, COLLECTIONS.goals);
+    const snap = await getDocs(collection(db, userPath));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as SavingGoal))
+      .sort(sortByCreatedAtDesc);
+  } catch (error) {
+    console.warn('Could not fetch friend goals:', error);
+    return [];
+  }
+}
+
+// Get friend's available balance (total salary - total expenses)
+export async function getFriendBalance(friendId: string): Promise<number> {
+  try {
+    const [expenses, salaries] = await Promise.all([
+      getFriendExpenses(friendId),
+      getFriendSalaries(friendId),
+    ]);
+
+    const totalIncome = salaries.reduce((sum, s) => sum + s.amount, 0);
+    const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+
+    return totalIncome - totalExpenses;
+  } catch (error) {
+    console.warn('Could not fetch friend balance:', error);
+    return 0;
+  }
+}
+
+// Get friend's expenses for current month
+export async function getFriendMonthExpenses(friendId: string): Promise<number> {
+  try {
+    const expenses = await getFriendExpenses(friendId);
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
+    const monthExpenses = expenses
+      .filter((e) => {
+        const date = new Date(e.date);
+        return date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+      })
+      .reduce((sum, e) => sum + e.amount, 0);
+
+    return monthExpenses;
+  } catch (error) {
+    console.warn('Could not fetch friend month expenses:', error);
+    return 0;
+  }
+}
+
+// Helper: Get friend's expenses
+async function getFriendExpenses(friendId: string): Promise<Expense[]> {
+  try {
+    const userPath = getUserCollectionPath(friendId, COLLECTIONS.expenses);
+    const snap = await getDocs(collection(db, userPath));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Expense));
+  } catch (error) {
+    console.warn('Could not fetch friend expenses:', error);
+    return [];
+  }
+}
+
+// Helper: Get friend's salaries
+async function getFriendSalaries(friendId: string): Promise<Salary[]> {
+  try {
+    const userPath = getUserCollectionPath(friendId, COLLECTIONS.salaries);
+    const snap = await getDocs(collection(db, userPath));
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Salary));
+  } catch (error) {
+    console.warn('Could not fetch friend salaries:', error);
+    return [];
+  }
 }

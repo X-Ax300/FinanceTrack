@@ -37,17 +37,21 @@ export function setCache<T>(collection: string, data: T, userId?: string): void 
 
 // Get cache data
 export function getCache<T>(collection: string, userId?: string): T | null {
+  return getCacheEntry<T>(collection, userId)?.data ?? null;
+}
+
+export function getCacheEntry<T>(collection: string, userId?: string): CacheEntry<T> | null {
   try {
     const key = getCacheKey(collection, userId);
     const memoryEntry = memoryCache.get(key) as CacheEntry<T> | undefined;
-    if (memoryEntry) return memoryEntry.data;
+    if (memoryEntry) return memoryEntry;
 
     const item = localStorage.getItem(key);
     if (!item) return null;
     
     const entry: CacheEntry<T> = JSON.parse(item);
     memoryCache.set(key, entry as CacheEntry<unknown>);
-    return entry.data;
+    return entry;
   } catch (error) {
     console.warn('Cache read failed:', error);
     return null;

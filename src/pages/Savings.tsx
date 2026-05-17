@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getGoals, addGoal, updateGoal, deleteGoal } from '../lib/firestore';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { useNotifications } from '../hooks/useNotifications';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -41,6 +42,7 @@ export default function Savings() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { notifySuccess, notifyError } = useNotifications();
   const [goals, setGoals] = useState<SavingGoal[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -66,39 +68,56 @@ export default function Savings() {
   async function handleSave() {
     if (!currentUser || !form.name || !form.targetAmount) return;
     setSaving(true);
-    const data = {
-      userId: currentUser.uid,
-      name: form.name,
-      targetAmount: parseFloat(form.targetAmount),
-      currentAmount: parseFloat(form.currentAmount || '0'),
-      category: form.category,
-      deadline: form.deadline || undefined,
-    };
-    if (editId) {
-      await updateGoal(editId, data);
-    } else {
-      await addGoal(data);
+    try {
+      const data = {
+        userId: currentUser.uid,
+        name: form.name,
+        targetAmount: parseFloat(form.targetAmount),
+        currentAmount: parseFloat(form.currentAmount || '0'),
+        category: form.category,
+        deadline: form.deadline || undefined,
+      };
+      if (editId) {
+        await updateGoal(editId, data);
+        notifySuccess('Meta actualizada', `${form.name} se actualizó correctamente`);
+      } else {
+        await addGoal(data);
+        notifySuccess('Meta creada', `${form.name} fue agregada a tus ahorros`);
+      }
+      await load();
+      setModalOpen(false);
+    } catch {
+      notifyError('Error', 'No se pudo guardar la meta');
+    } finally {
+      setSaving(false);
     }
-    await load();
-    setModalOpen(false);
-    setSaving(false);
   }
 
   async function handleAddFunds() {
     if (!addFundsId || !fundsAmount) return;
     const goal = goals.find((g) => g.id === addFundsId);
     if (!goal) return;
-    await updateGoal(addFundsId, { currentAmount: goal.currentAmount + parseFloat(fundsAmount) });
-    setAddFundsId(null);
-    setFundsAmount('');
-    await load();
+    try {
+      await updateGoal(addFundsId, { currentAmount: goal.currentAmount + parseFloat(fundsAmount) });
+      notifySuccess('Fondos agregados', `${formatCurrency(parseFloat(fundsAmount))} se agregaron a ${goal.name}`);
+      setAddFundsId(null);
+      setFundsAmount('');
+      await load();
+    } catch {
+      notifyError('Error', 'No se pudieron agregar los fondos');
+    }
   }
 
   async function handleDelete() {
     if (!deleteId || !currentUser) return;
-    await deleteGoal(deleteId, currentUser.uid);
-    setDeleteId(null);
-    await load();
+    try {
+      await deleteGoal(deleteId, currentUser.uid);
+      notifySuccess('Meta eliminada', 'La meta de ahorro fue eliminada');
+      setDeleteId(null);
+      await load();
+    } catch {
+      notifyError('Error', 'No se pudo eliminar la meta');
+    }
   }
 
   const totalSaved = goals.reduce((a, g) => a + g.currentAmount, 0);

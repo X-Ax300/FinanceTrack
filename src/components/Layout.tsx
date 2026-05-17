@@ -11,6 +11,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../hooks/useNotifications';
 import { subscribeFriends } from '../lib/firestore';
 import AppVersionStatus from './AppVersionStatus';
+import { NotificationHistory } from './NotificationHistory';
 import type { Friend } from '../types';
 
 const navItems = [
@@ -32,10 +33,11 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
   const { currentUser, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { t } = useLanguage();
-  const { canNotify, isGranted, permission, requestPermission, notifySuccess } = useNotifications();
+  const { canNotify, isGranted, permission, requestPermission, notifySuccess, notifyFriend } = useNotifications();
   const navigate = useNavigate();
   const [requestingNotifications, setRequestingNotifications] = useState(false);
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
@@ -55,13 +57,13 @@ export default function Layout({ children }: LayoutProps) {
         setPendingFriendRequests(pending);
 
         if (previousPendingRef.current !== null && pending > previousPendingRef.current) {
-          notifySuccess(t('New friend request'), t('Open Friends to accept or reject it.'));
+          notifyFriend(t('New friend request'), t('Open Friends to accept or reject it.'), '/friends');
         }
         previousPendingRef.current = pending;
       },
       (error) => console.error('Friend listener failed:', error)
     );
-  }, [currentUser, notifySuccess, t]);
+  }, [currentUser, notifyFriend, t]);
 
   async function handleLogout() {
     await logout();
@@ -212,9 +214,9 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex-1" />
 
           <button
-            onClick={handleNotificationPermission}
+            onClick={() => isGranted ? setNotificationHistoryOpen(true) : handleNotificationPermission()}
             className={`relative p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-600 hover:bg-gray-100'}`}
-            title={isGranted ? t('Notifications enabled title') : t('Enable notifications')}
+            title={isGranted ? t('View notifications') : t('Enable notifications')}
           >
             <Bell className="w-5 h-5" />
             {!isGranted && permission === 'default' && (
@@ -248,6 +250,8 @@ export default function Layout({ children }: LayoutProps) {
           {children}
         </main>
       </div>
+
+      <NotificationHistory open={notificationHistoryOpen} onClose={() => setNotificationHistoryOpen(false)} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { getSalaries, addSalary, updateSalary, deleteSalary, getExpenses, getCardPayments } from '../lib/firestore';
+import { useNotifications } from '../hooks/useNotifications';
 import {
   formatCurrency,
   formatDate,
@@ -30,6 +31,7 @@ export default function SalaryPage() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { notifySuccess, notifyError } = useNotifications();
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [cardPayments, setCardPayments] = useState<CardPayment[]>([]);
@@ -73,30 +75,42 @@ export default function SalaryPage() {
   async function handleSave() {
     if (!currentUser || !form.amount) return;
     setSaving(true);
-    const data = {
-      userId: currentUser.uid,
-      amount: parseFloat(form.amount),
-      type: form.type,
-      month: parseInt(form.month),
-      year: parseInt(form.year),
-      date: form.date,
-      note: form.note,
-    };
-    if (editId) {
-      await updateSalary(editId, data);
-    } else {
-      await addSalary(data);
+    try {
+      const data = {
+        userId: currentUser.uid,
+        amount: parseFloat(form.amount),
+        type: form.type,
+        month: parseInt(form.month),
+        year: parseInt(form.year),
+        date: form.date,
+        note: form.note,
+      };
+      if (editId) {
+        await updateSalary(editId, data);
+        notifySuccess('Ingreso actualizado', `${formatCurrency(data.amount)} se actualizó correctamente`);
+      } else {
+        await addSalary(data);
+        notifySuccess('Ingreso registrado', `${formatCurrency(data.amount)} fue agregado`);
+      }
+      await load();
+      setModalOpen(false);
+    } catch {
+      notifyError('Error', 'No se pudo guardar el ingreso');
+    } finally {
+      setSaving(false);
     }
-    await load();
-    setModalOpen(false);
-    setSaving(false);
   }
 
   async function handleDelete() {
     if (!deleteId || !currentUser) return;
-    await deleteSalary(deleteId, currentUser.uid);
-    setDeleteId(null);
-    await load();
+    try {
+      await deleteSalary(deleteId, currentUser.uid);
+      notifySuccess('Ingreso eliminado', 'El registro fue eliminado correctamente');
+      setDeleteId(null);
+      await load();
+    } catch {
+      notifyError('Error', 'No se pudo eliminar el ingreso');
+    }
   }
 
   const curMonth = getCurrentMonth();

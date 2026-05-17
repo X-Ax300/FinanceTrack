@@ -16,6 +16,7 @@ import {
   deleteCardCharge,
 } from '../lib/firestore';
 import { formatCurrency, MONTHS, getCurrentMonth, getCurrentYear, CATEGORY_LABELS, getCardDebt, parseDateString } from '../lib/utils';
+import { useNotifications } from '../hooks/useNotifications';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
@@ -47,6 +48,7 @@ export default function Cards() {
   const { currentUser } = useAuth();
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { notifySuccess, notifyError } = useNotifications();
   const [cards, setCards] = useState<CreditCardType[]>([]);
   const [payments, setPayments] = useState<CardPayment[]>([]);
   const [charges, setCharges] = useState<CardCharge[]>([]);
@@ -112,14 +114,17 @@ export default function Cards() {
       };
       if (editId) {
         await updateCard(editId, data);
+        notifySuccess('Tarjeta actualizada', `${data.bankName} se actualizó correctamente`);
       } else {
         await addCard(data);
+        notifySuccess('Tarjeta registrada', `${data.bankName} fue agregada`);
       }
       await load(true);
       setCardModal(false);
     } catch (err) {
       console.error('Failed to save card:', err);
       setError(t('Could not save the credit card. Please check your connection and try again.'));
+      notifyError('Error', 'No se pudo guardar la tarjeta');
     } finally {
       setSaving(false);
     }
@@ -139,11 +144,13 @@ export default function Cards() {
         date: payForm.date,
         note: payForm.note,
       });
+      notifySuccess('Pago registrado', `${formatCurrency(parseFloat(payForm.amount))} pagado a ${selectedCard.bankName}`);
       await load(true);
       setPayModal(false);
     } catch (err) {
       console.error('Failed to save card payment:', err);
       setError(t('Could not save the payment. Please check your connection and try again.'));
+      notifyError('Error', 'No se pudo registrar el pago');
     } finally {
       setSaving(false);
     }
@@ -163,11 +170,13 @@ export default function Cards() {
         category: chargeForm.category,
         note: chargeForm.note.trim() || undefined,
       });
+      notifySuccess('Uso de tarjeta registrado', `${chargeForm.description.trim()} por ${formatCurrency(parseFloat(chargeForm.amount))}`);
       await load(true);
       setChargeModal(false);
     } catch (err) {
       console.error('Failed to save card charge:', err);
       setError(t('Could not save the card usage. Please check your connection and try again.'));
+      notifyError('Error', 'No se pudo registrar el uso de tarjeta');
     } finally {
       setSaving(false);
     }
@@ -178,11 +187,35 @@ export default function Cards() {
     setError('');
     try {
       await deleteCard(deleteId, currentUser.uid);
+      notifySuccess('Tarjeta eliminada', 'La tarjeta y sus registros fueron eliminados');
       setDeleteId(null);
       await load(true);
     } catch (err) {
       console.error('Failed to delete card:', err);
       setError(t('Could not delete the card. Please try again.'));
+      notifyError('Error', 'No se pudo eliminar la tarjeta');
+    }
+  }
+
+  async function handleDeleteCharge(chargeId: string) {
+    if (!currentUser) return;
+    try {
+      await deleteCardCharge(chargeId, currentUser.uid);
+      notifySuccess('Carga eliminada', 'El uso de tarjeta fue eliminado');
+      await load(true);
+    } catch {
+      notifyError('Error', 'No se pudo eliminar la carga');
+    }
+  }
+
+  async function handleDeletePayment(paymentId: string) {
+    if (!currentUser) return;
+    try {
+      await deleteCardPayment(paymentId, currentUser.uid);
+      notifySuccess('Pago eliminado', 'El pago de tarjeta fue eliminado');
+      await load(true);
+    } catch {
+      notifyError('Error', 'No se pudo eliminar el pago');
     }
   }
 
@@ -307,7 +340,7 @@ export default function Cards() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-rose-400">{formatCurrency(charge.amount)}</span>
-                          <button onClick={() => { if (currentUser) { deleteCardCharge(charge.id!, currentUser.uid); load(true); } }} className="text-gray-600 hover:text-red-400 transition-colors">
+                          <button onClick={() => charge.id && handleDeleteCharge(charge.id)} className="text-gray-600 hover:text-red-400 transition-colors">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
@@ -325,7 +358,7 @@ export default function Cards() {
                         <span className={`text-xs ${textSecondary}`}>{t(MONTHS[p.month - 1])} {p.year}</span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-medium text-emerald-400">{formatCurrency(p.amount)}</span>
-                          <button onClick={() => { if (currentUser) { deleteCardPayment(p.id!, currentUser.uid); load(true); } }} className="text-gray-600 hover:text-red-400 transition-colors">
+                          <button onClick={() => p.id && handleDeletePayment(p.id)} className="text-gray-600 hover:text-red-400 transition-colors">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
