@@ -21,3 +21,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Firebase local cache
+.firebase
+
+# Secrets and service account keys
+serviceAccountKey.json
+.env*
